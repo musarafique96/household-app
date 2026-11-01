@@ -41,7 +41,10 @@ jobs:
       - name: Build Android APK
         run: |
           cd "$RUNNER_TEMP/app"
-          dotnet build -f net9.0-android -c Debug -p:AndroidPackageFormat=apk
+          # Use whatever Android target the template generated (it may not be net9.0).
+          TFM=$(grep -oP '(?<=<TargetFrameworks>)[^<]*' HouseholdApp.csproj | tr ';' '\n' | grep android | head -n 1)
+          echo "Building for $TFM"
+          dotnet build -f "$TFM" -c Debug -p:AndroidPackageFormat=apk
 
       - name: Collect APK
         run: |
