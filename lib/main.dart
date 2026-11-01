@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
+import 'app_settings.dart';
 import 'data/models.dart';
 import 'screens/account_screen.dart';
 import 'screens/budget_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/expenses_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/split_screen.dart';
 import 'session.dart';
+import 'theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppSettings.load();
   Session.restore();
   runApp(const HouseholdApp());
 }
@@ -18,14 +22,18 @@ class HouseholdApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Household',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF512BD4),
-        useMaterial3: true,
-      ),
-      home: const HomeShell(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppSettings.themeMode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'Household',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(dark: false),
+          darkTheme: buildTheme(dark: true),
+          themeMode: mode,
+          home: const HomeShell(),
+        );
+      },
     );
   }
 }
@@ -40,6 +48,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
+  void _openTab(int tab) => setState(() => _index = tab);
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppUser?>(
@@ -51,35 +61,41 @@ class _HomeShellState extends State<HomeShell> {
           body: IndexedStack(
             index: _index,
             children: [
+              HomeScreen(key: ValueKey('home-$id'), onOpenTab: _openTab),
               const AccountScreen(key: ValueKey('account')),
-              BudgetScreen(key: ValueKey('budget-$id')),
-              DashboardScreen(key: ValueKey('dashboard-$id')),
+              const ExpensesScreen(key: ValueKey('expenses')),
               SplitScreen(key: ValueKey('split-$id')),
+              BudgetScreen(key: ValueKey('budget-$id')),
             ],
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
+            onDestinationSelected: _openTab,
             destinations: const [
               NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: 'Home',
+              ),
+              NavigationDestination(
                 icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Account',
+                selectedIcon: Icon(Icons.person_rounded),
+                label: 'Accounts',
               ),
               NavigationDestination(
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                selectedIcon: Icon(Icons.account_balance_wallet),
-                label: 'Budget',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.bar_chart_outlined),
-                selectedIcon: Icon(Icons.bar_chart),
-                label: 'Dashboard',
+                icon: Icon(Icons.wallet_outlined),
+                selectedIcon: Icon(Icons.wallet_rounded),
+                label: 'Expenses',
               ),
               NavigationDestination(
                 icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups),
+                selectedIcon: Icon(Icons.groups_rounded),
                 label: 'Split',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                selectedIcon: Icon(Icons.account_balance_wallet_rounded),
+                label: 'Budget',
               ),
             ],
           ),

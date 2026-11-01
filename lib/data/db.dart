@@ -82,6 +82,18 @@ class Db {
     return rows.map(Expense.fromMap).toList();
   }
 
+  Future<List<Expense>> recentExpenses(int userId, {int limit = 5}) async {
+    final db = await _database;
+    final rows = await db.query(
+      'expenses',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'date DESC, id DESC',
+      limit: limit,
+    );
+    return rows.map(Expense.fromMap).toList();
+  }
+
   Future<void> addExpense({
     required int userId,
     required int categoryId,
