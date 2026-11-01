@@ -62,7 +62,19 @@ class Expense {
       );
 }
 
-// A shared expense (Split / Qattah): one person paid, and the cost is split equally.
+/// A group of people who share expenses, such as a family or a trip.
+class Group {
+  final int id;
+  final String name;
+  final List<int> members;
+
+  const Group({required this.id, required this.name, required this.members});
+}
+
+/// A shared expense (Split / Qattah).
+/// [splitMethod] is 'equal', 'amount', 'percent', or 'settlement'.
+/// [shares] is how much each person owes. A settlement is a payment from the
+/// person who paid to the person it was paid to.
 class SharedExpense {
   final int id;
   final String title;
@@ -70,6 +82,9 @@ class SharedExpense {
   final int paidBy;
   final List<int> participants;
   final DateTime date;
+  final int groupId;
+  final String splitMethod;
+  final Map<int, double> shares;
 
   const SharedExpense({
     required this.id,
@@ -78,18 +93,47 @@ class SharedExpense {
     required this.paidBy,
     required this.participants,
     required this.date,
+    required this.groupId,
+    required this.splitMethod,
+    required this.shares,
   });
 
-  factory SharedExpense.fromMap(Map<String, Object?> m) => SharedExpense(
-        id: m['id'] as int,
-        title: m['title'] as String,
-        amount: (m['amount'] as num).toDouble(),
-        paidBy: m['paidBy'] as int,
-        participants: (m['participants'] as String)
-            .split(',')
-            .where((s) => s.isNotEmpty)
-            .map(int.parse)
-            .toList(),
-        date: DateTime.parse(m['date'] as String),
-      );
+  bool get isSettlement => splitMethod == 'settlement';
+
+  /// Amount each person owes. Rows saved before shares existed are split equally.
+  Map<int, double> get owed {
+    if (shares.isNotEmpty) return shares;
+    if (participants.isEmpty) return const {};
+    final each = amount / participants.length;
+    return {for (final p in participants) p: each};
+  }
+
+  factory SharedExpense.fromMap(Map<String, Object?> m) {
+    final participants = (m['participants'] as String)
+        .split(',')
+        .where((s) => s.isNotEmpty)
+        .map(int.parse)
+        .toList();
+
+    final shares = <int, double>{};
+    final raw = (m['shares'] as String?) ?? '';
+    for (final pair in raw.split(';')) {
+      final parts = pair.split(':');
+      if (parts.length == 2) {
+        shares[int.parse(parts[0])] = double.parse(parts[1]);
+      }
+    }
+
+    return SharedExpense(
+      id: m['id'] as int,
+      title: m['title'] as String,
+      amount: (m['amount'] as num).toDouble(),
+      paidBy: m['paidBy'] as int,
+      participants: participants,
+      date: DateTime.parse(m['date'] as String),
+      groupId: (m['groupId'] as int?) ?? 0,
+      splitMethod: (m['splitMethod'] as String?) ?? 'equal',
+      shares: shares,
+    );
+  }
 }

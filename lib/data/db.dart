@@ -19,7 +19,7 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL)');
@@ -28,7 +28,25 @@ class Db {
         await db.execute(
             'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL)');
         await db.execute(
-            'CREATE TABLE shared (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, amount REAL NOT NULL, paidBy INTEGER NOT NULL, participants TEXT NOT NULL, date TEXT NOT NULL)');
+            'CREATE TABLE shared (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, amount REAL NOT NULL, paidBy INTEGER NOT NULL, participants TEXT NOT NULL, date TEXT NOT NULL, groupId INTEGER NOT NULL DEFAULT 0, splitMethod TEXT NOT NULL DEFAULT \'equal\', shares TEXT NOT NULL DEFAULT \'\')');
+        await db.execute(
+            'CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
+        await db.execute(
+            'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+              'ALTER TABLE shared ADD COLUMN groupId INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE shared ADD COLUMN splitMethod TEXT NOT NULL DEFAULT \'equal\'');
+          await db.execute(
+              'ALTER TABLE shared ADD COLUMN shares TEXT NOT NULL DEFAULT \'\'');
+          await db.execute(
+              'CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
+          await db.execute(
+              'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
+        }
       },
     );
     _db = opened;
@@ -111,6 +129,31 @@ class Db {
     });
   }
 
+  // Groups
+  Future<List<Group>> groups() async {
+    final db = await _database;
+    final rows = await db.query('groups', orderBy: 'id');
+    final memberRows = await db.query('group_members');
+    final result = <Group>[];
+    for (final r in rows) {
+      final id = r['id'] as int;
+      final members = [
+        for (final m in memberRows)
+          if (m['groupId'] == id) m['userId'] as int,
+      ];
+      result.add(Group(id: id, name: r['name'] as String, members: members));
+    }
+    return result;
+  }
+
+  Future<void> addGroup(String name, List<int> memberIds) async {
+    final db = await _database;
+    final id = await db.insert('groups', {'name': name});
+    for (final m in memberIds) {
+      await db.insert('group_members', {'groupId': id, 'userId': m});
+    }
+  }
+
   // Split / Qattah
   Future<List<SharedExpense>> sharedExpenses() async {
     final db = await _database;
@@ -118,20 +161,28 @@ class Db {
     return rows.map(SharedExpense.fromMap).toList();
   }
 
+  /// [shares] is how much each person owes. Participants are the people in [shares].
   Future<void> addShared({
     required String title,
     required double amount,
     required int paidBy,
-    required List<int> participants,
+    required Map<int, double> shares,
     required DateTime date,
+    int groupId = 0,
+    String splitMethod = 'equal',
   }) async {
     final db = await _database;
+    final ids = shares.keys.toList();
+    final sharesText = shares.entries.map((e) => '${e.key}:${e.value}').join(';');
     await db.insert('shared', {
       'title': title,
       'amount': amount,
       'paidBy': paidBy,
-      'participants': participants.join(','),
+      'participants': ids.join(','),
       'date': ymd(date),
+      'groupId': groupId,
+      'splitMethod': splitMethod,
+      'shares': sharesText,
     });
   }
 }
