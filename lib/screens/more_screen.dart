@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_settings.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
+import 'reports_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -11,7 +12,8 @@ class MoreScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final features = <_Feature>[
       _Feature('Reports', 'Download & share', Icons.bar_chart_rounded, AppColors.primary,
-          'Monthly and yearly reports you can download and share.'),
+          'Monthly and yearly reports you can download and share.',
+          page: (_) => const ReportsScreen()),
       _Feature('Recurring', 'Auto-add expenses', Icons.event_repeat_rounded, AppColors.pink,
           'Rent, subscriptions, and bills that are added automatically.'),
       _Feature('Receipts', 'Scan & attach', Icons.photo_camera_rounded, AppColors.primary,
@@ -123,7 +125,7 @@ class MoreScreen extends StatelessWidget {
 
   void _open(BuildContext context, _Feature f) {
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _FeaturePage(feature: f),
+      builder: f.page ?? (_) => _FeaturePage(feature: f),
     ));
   }
 
@@ -165,8 +167,10 @@ class _Feature {
   final IconData icon;
   final Color color;
   final String description;
+  final WidgetBuilder? page;
 
-  const _Feature(this.title, this.subtitle, this.icon, this.color, this.description);
+  const _Feature(this.title, this.subtitle, this.icon, this.color, this.description,
+      {this.page});
 }
 
 class _FeaturePage extends StatelessWidget {
