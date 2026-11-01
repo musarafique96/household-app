@@ -55,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = Session.current.value;
     if (user == null) return null;
 
+    await Db.instance.applyDueRecurring(user.id, DateTime.now());
     final cats = await Db.instance.categories(user.id);
     final month = await Db.instance.expenses(user.id, _month);
     final recent = await Db.instance.recentExpenses(user.id, limit: 5);

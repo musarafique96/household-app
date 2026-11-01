@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -19,7 +21,7 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL)');
@@ -33,6 +35,8 @@ class Db {
             'CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
         await db.execute(
             'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
+        await db.execute(
+            'CREATE TABLE recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, amount REAL NOT NULL, categoryId INTEGER NOT NULL, day INTEGER NOT NULL, lastApplied TEXT NOT NULL DEFAULT \'\')');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -46,6 +50,10 @@ class Db {
               'CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
           await db.execute(
               'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
+        }
+        if (oldVersion < 3) {
+          await db.execute(
+              'CREATE TABLE recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, amount REAL NOT NULL, categoryId INTEGER NOT NULL, day INTEGER NOT NULL, lastApplied TEXT NOT NULL DEFAULT \'\')');
         }
       },
     );
@@ -172,6 +180,70 @@ class Db {
         await txn.insert('group_members', {'groupId': groupId, 'userId': m});
       }
     });
+  }
+
+  // Recurring expenses
+  Future<List<RecurringExpense>> recurring(int userId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'recurring',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'id',
+    );
+    return rows.map(RecurringExpense.fromMap).toList();
+  }
+
+  Future<void> addRecurring({
+    required int userId,
+    required String name,
+    required double amount,
+    required int categoryId,
+    required int day,
+  }) async {
+    final db = await _database;
+    await db.insert('recurring', {
+      'userId': userId,
+      'name': name,
+      'amount': amount,
+      'categoryId': categoryId,
+      'day': day,
+      'lastApplied': '',
+    });
+  }
+
+  Future<void> deleteRecurring(int id) async {
+    final db = await _database;
+    await db.delete('recurring', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Adds this month's recurring expenses that are due on or before [now].
+  /// Each one is added once per month. Returns how many were added.
+  Future<int> applyDueRecurring(int userId, DateTime now) async {
+    final db = await _database;
+    final thisMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final lastDay = DateTime(now.year, now.month + 1, 0).day;
+    final items = await recurring(userId);
+    var added = 0;
+    for (final r in items) {
+      final dueDay = math.min(r.day, lastDay);
+      if (r.lastApplied == thisMonth || now.day < dueDay) continue;
+      await db.insert('expenses', {
+        'userId': userId,
+        'categoryId': r.categoryId,
+        'amount': r.amount,
+        'note': '${r.name} (recurring)',
+        'date': ymd(DateTime(now.year, now.month, dueDay)),
+      });
+      await db.update(
+        'recurring',
+        {'lastApplied': thisMonth},
+        where: 'id = ?',
+        whereArgs: [r.id],
+      );
+      added++;
+    }
+    return added;
   }
 
   // Split / Qattah

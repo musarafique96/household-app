@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_settings.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
+import 'recurring_screen.dart';
 import 'reports_screen.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -15,7 +16,8 @@ class MoreScreen extends StatelessWidget {
           'Monthly and yearly reports you can download and share.',
           page: (_) => const ReportsScreen()),
       _Feature('Recurring', 'Auto-add expenses', Icons.event_repeat_rounded, AppColors.pink,
-          'Rent, subscriptions, and bills that are added automatically.'),
+          'Rent, subscriptions, and bills that are added automatically.',
+          page: (_) => const RecurringScreen()),
       _Feature('Receipts', 'Scan & attach', Icons.photo_camera_rounded, AppColors.primary,
           'Attach a photo of a receipt to any expense.'),
       _Feature('Export', 'PDF / Excel', Icons.file_download_rounded, AppColors.green,

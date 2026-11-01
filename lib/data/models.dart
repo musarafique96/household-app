@@ -62,6 +62,38 @@ class Expense {
       );
 }
 
+/// An expense that is added automatically each month on a set day.
+/// [lastApplied] is the month it was last added, as yyyy-MM ('' if never).
+class RecurringExpense {
+  final int id;
+  final int userId;
+  final String name;
+  final double amount;
+  final int categoryId;
+  final int day;
+  final String lastApplied;
+
+  const RecurringExpense({
+    required this.id,
+    required this.userId,
+    required this.name,
+    required this.amount,
+    required this.categoryId,
+    required this.day,
+    required this.lastApplied,
+  });
+
+  factory RecurringExpense.fromMap(Map<String, Object?> m) => RecurringExpense(
+        id: m['id'] as int,
+        userId: m['userId'] as int,
+        name: m['name'] as String,
+        amount: (m['amount'] as num).toDouble(),
+        categoryId: m['categoryId'] as int,
+        day: m['day'] as int,
+        lastApplied: (m['lastApplied'] as String?) ?? '',
+      );
+}
+
 /// A group of people who share expenses, such as a family or a trip.
 class Group {
   final int id;
