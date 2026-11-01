@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HouseholdApp.Pages.AccountPage"
+             Title="Account">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <Label Text="Household accounts" Style="{StaticResource Heading}" />
+
+            <Frame Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Choose your account" FontAttributes="Bold" />
+                    <Picker x:Name="UserPicker" Title="Select an account"
+                            ItemDisplayBinding="{Binding DisplayName}" />
+                    <Button Text="Use this account" Clicked="OnUseClicked"
+                            Style="{StaticResource PrimaryButton}" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <Frame Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Create a new account" FontAttributes="Bold" />
+                    <Entry x:Name="NameEntry" Placeholder="Name" />
+                    <Entry x:Name="CurrencyEntry" Placeholder="Currency code (e.g. SAR, PKR, USD)" Text="SAR" />
+                    <Button Text="Create account" Clicked="OnCreateClicked"
+                            Style="{StaticResource PrimaryButton}" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <Label x:Name="StatusLabel" TextColor="#6B6880" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

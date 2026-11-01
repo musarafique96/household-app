@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:pages="clr-namespace:HouseholdApp.Pages"
+       x:Class="HouseholdApp.AppShell"
+       Shell.FlyoutBehavior="Disabled"
+       Shell.TabBarBackgroundColor="White"
+       Shell.TabBarForegroundColor="#512BD4"
+       Shell.TabBarUnselectedColor="#8A8698"
+       Shell.NavBarIsVisible="True">
+
+    <TabBar>
+        <ShellContent Title="Budget"
+                      ContentTemplate="{DataTemplate pages:BudgetPage}"
+                      Route="budget" />
+        <ShellContent Title="Dashboard"
+                      ContentTemplate="{DataTemplate pages:DashboardPage}"
+                      Route="dashboard" />
+        <ShellContent Title="Split"
+                      ContentTemplate="{DataTemplate pages:SplitPage}"
+                      Route="split" />
+        <ShellContent Title="Account"
+                      ContentTemplate="{DataTemplate pages:AccountPage}"
+                      Route="account" />
+    </TabBar>
+
+</Shell>

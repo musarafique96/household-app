@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI Android workload
+        run: |
+          dotnet workload install maui-android
+          dotnet workload install android
+
+      - name: Create MAUI project from template
+        run: |
+          dotnet new maui -n HouseholdApp -o "$RUNNER_TEMP/app"
+          cd "$RUNNER_TEMP/app"
+          rm -f MainPage.xaml MainPage.xaml.cs
+          dotnet add package sqlite-net-pcl --version 1.9.172
+          dotnet add package SQLitePCLRaw.bundle_green --version 2.1.10
+
+      - name: Copy our source into the project
+        run: |
+          SRC="$GITHUB_WORKSPACE"
+          DST="$RUNNER_TEMP/app"
+          cp "$SRC/App.xaml" "$SRC/App.xaml.cs" "$SRC/AppShell.xaml" "$SRC/AppShell.xaml.cs" "$SRC/MauiProgram.cs" "$DST/"
+          cp -r "$SRC/Models" "$SRC/Data" "$SRC/Services" "$SRC/Pages" "$DST/"
+
+      - name: Build Android APK
+        run: |
+          cd "$RUNNER_TEMP/app"
+          dotnet build -f net9.0-android -c Debug -p:AndroidPackageFormat=apk
+
+      - name: Collect APK
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          APK=$(find "$RUNNER_TEMP/app/bin" -name "*.apk" | head -n 1)
+          echo "Found: $APK"
+          cp "$APK" "$RUNNER_TEMP/out/HouseholdApp.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HouseholdApp-apk
+          path: ${{ runner.temp }}/out/HouseholdApp.apk

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HouseholdApp.Pages.BudgetPage"
+             Title="Budget">
+
+    <CollectionView x:Name="CategoryList">
+        <CollectionView.Header>
+            <VerticalStackLayout Padding="16" Spacing="14">
+
+                <Label x:Name="MonthLabel" Style="{StaticResource Heading}" />
+                <Label x:Name="StatusLabel" TextColor="#6B6880" />
+
+                <Frame Style="{StaticResource Card}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Add expense" FontAttributes="Bold" />
+                        <Picker x:Name="CategoryPicker" Title="Category"
+                                ItemDisplayBinding="{Binding Name}" />
+                        <Entry x:Name="AmountEntry" Placeholder="Amount" Keyboard="Numeric" />
+                        <Entry x:Name="NoteEntry" Placeholder="Note (optional)" />
+                        <Button Text="Add expense" Clicked="OnAddExpenseClicked"
+                                Style="{StaticResource PrimaryButton}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Style="{StaticResource Card}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Add budget category" FontAttributes="Bold" />
+                        <Entry x:Name="CategoryNameEntry" Placeholder="Category name (e.g. Groceries)" />
+                        <Entry x:Name="CategoryLimitEntry" Placeholder="Monthly limit" Keyboard="Numeric" />
+                        <Button Text="Add category" Clicked="OnAddCategoryClicked"
+                                Style="{StaticResource PrimaryButton}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Label Text="This month" FontAttributes="Bold" Margin="0,4,0,0" />
+            </VerticalStackLayout>
+        </CollectionView.Header>
+
+        <CollectionView.ItemTemplate>
+            <DataTemplate>
+                <Frame Style="{StaticResource Card}" Margin="16,0,16,12">
+                    <VerticalStackLayout Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" />
+                            <Label Grid.Column="1" Text="{Binding Text}" TextColor="#6B6880" FontSize="13" />
+                        </Grid>
+                        <ProgressBar Progress="{Binding Progress}" ProgressColor="{Binding BarColor}" />
+                    </VerticalStackLayout>
+                </Frame>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
+    </CollectionView>
+</ContentPage>
