@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_settings.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
+import 'export_screen.dart';
 import 'recurring_screen.dart';
 import 'reports_screen.dart';
 
@@ -21,7 +22,8 @@ class MoreScreen extends StatelessWidget {
       _Feature('Receipts', 'Scan & attach', Icons.photo_camera_rounded, AppColors.primary,
           'Attach a photo of a receipt to any expense.'),
       _Feature('Export', 'PDF / Excel', Icons.file_download_rounded, AppColors.green,
-          'Export your expenses and reports to PDF or Excel.'),
+          'Export your expenses and reports to PDF or Excel.',
+          page: (_) => const ExportScreen()),
       _Feature('Currency', 'Multi-currency', Icons.sync_alt_rounded, AppColors.primary,
           'Track expenses in more than one currency.'),
       _Feature('Reminders', 'Bill & settlement alerts', Icons.notifications_rounded,
