@@ -154,6 +154,26 @@ class Db {
     }
   }
 
+  Future<void> updateUser(int id, String name, String currency) async {
+    final db = await _database;
+    await db.update(
+      'users',
+      {'name': name, 'currency': currency},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> updateGroupMembers(int groupId, List<int> memberIds) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('group_members', where: 'groupId = ?', whereArgs: [groupId]);
+      for (final m in memberIds) {
+        await txn.insert('group_members', {'groupId': groupId, 'userId': m});
+      }
+    });
+  }
+
   // Split / Qattah
   Future<List<SharedExpense>> sharedExpenses() async {
     final db = await _database;
