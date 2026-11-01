@@ -19,8 +19,13 @@ public class LocalDb
 
     public async Task InitAsync()
     {
-        await _db.CreateTablesAsync<UserAccount, BudgetCategory, Expense,
-            SharedExpense, Reminder, GroceryItem, Recipe>();
+        await _db.CreateTableAsync<UserAccount>();
+        await _db.CreateTableAsync<BudgetCategory>();
+        await _db.CreateTableAsync<Expense>();
+        await _db.CreateTableAsync<SharedExpense>();
+        await _db.CreateTableAsync<Reminder>();
+        await _db.CreateTableAsync<GroceryItem>();
+        await _db.CreateTableAsync<Recipe>();
     }
 
     // Users
