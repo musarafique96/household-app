@@ -21,14 +21,14 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL)');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
-            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL)');
+            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL, currency TEXT NOT NULL DEFAULT \'\', originalAmount REAL NOT NULL DEFAULT 0)');
         await db.execute(
             'CREATE TABLE shared (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, amount REAL NOT NULL, paidBy INTEGER NOT NULL, participants TEXT NOT NULL, date TEXT NOT NULL, groupId INTEGER NOT NULL DEFAULT 0, splitMethod TEXT NOT NULL DEFAULT \'equal\', shares TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
@@ -37,6 +37,8 @@ class Db {
             'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
         await db.execute(
             'CREATE TABLE recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, amount REAL NOT NULL, categoryId INTEGER NOT NULL, day INTEGER NOT NULL, lastApplied TEXT NOT NULL DEFAULT \'\')');
+        await db.execute(
+            'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -50,6 +52,14 @@ class Db {
               'CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
           await db.execute(
               'CREATE TABLE group_members (groupId INTEGER NOT NULL, userId INTEGER NOT NULL)');
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+              'ALTER TABLE expenses ADD COLUMN currency TEXT NOT NULL DEFAULT \'\'');
+          await db.execute(
+              'ALTER TABLE expenses ADD COLUMN originalAmount REAL NOT NULL DEFAULT 0');
+          await db.execute(
+              'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
         }
         if (oldVersion < 3) {
           await db.execute(
@@ -120,12 +130,16 @@ class Db {
     return rows.map(Expense.fromMap).toList();
   }
 
+  /// [amount] is in the account currency. [currency] and [originalAmount]
+  /// record what was entered, if it was in another currency.
   Future<void> addExpense({
     required int userId,
     required int categoryId,
     required double amount,
     required String note,
     required DateTime date,
+    String currency = '',
+    double? originalAmount,
   }) async {
     final db = await _database;
     await db.insert('expenses', {
@@ -134,7 +148,43 @@ class Db {
       'amount': amount,
       'note': note,
       'date': ymd(date),
+      'currency': currency,
+      'originalAmount': originalAmount ?? amount,
     });
+  }
+
+  // Exchange rates: how much one unit of a currency is worth in the account currency.
+  Future<Map<String, double>> exchangeRates(int userId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'exchange_rates',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'currency',
+    );
+    final result = <String, double>{};
+    for (final r in rows) {
+      result[r['currency'] as String] = (r['rate'] as num).toDouble();
+    }
+    return result;
+  }
+
+  Future<void> setExchangeRate(int userId, String currency, double rate) async {
+    final db = await _database;
+    await db.insert(
+      'exchange_rates',
+      {'userId': userId, 'currency': currency, 'rate': rate},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteExchangeRate(int userId, String currency) async {
+    final db = await _database;
+    await db.delete(
+      'exchange_rates',
+      where: 'userId = ? AND currency = ?',
+      whereArgs: [userId, currency],
+    );
   }
 
   // Groups

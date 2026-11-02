@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_settings.dart';
 import '../theme.dart';
 import '../widgets/ui.dart';
+import 'currency_screen.dart';
 import 'export_screen.dart';
 import 'recurring_screen.dart';
 import 'reports_screen.dart';
@@ -25,7 +26,8 @@ class MoreScreen extends StatelessWidget {
           'Export your expenses and reports to PDF or Excel.',
           page: (_) => const ExportScreen()),
       _Feature('Currency', 'Multi-currency', Icons.sync_alt_rounded, AppColors.primary,
-          'Track expenses in more than one currency.'),
+          'Track expenses in more than one currency.',
+          page: (_) => const CurrencyScreen()),
       _Feature('Reminders', 'Bill & settlement alerts', Icons.notifications_rounded,
           AppColors.amber, 'Reminders for bills and for settling up with friends.'),
       _Feature('Backup & Sync', 'Keep data safe', Icons.cloud_done_rounded, AppColors.blue,

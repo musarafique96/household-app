@@ -43,6 +43,12 @@ class Expense {
   final String note;
   final DateTime date;
 
+  /// Currency the expense was entered in. '' means the account currency.
+  final String currency;
+
+  /// Amount in [currency]. [amount] is always in the account currency.
+  final double originalAmount;
+
   const Expense({
     required this.id,
     required this.userId,
@@ -50,6 +56,8 @@ class Expense {
     required this.amount,
     required this.note,
     required this.date,
+    this.currency = '',
+    this.originalAmount = 0.0,
   });
 
   factory Expense.fromMap(Map<String, Object?> m) => Expense(
@@ -59,6 +67,8 @@ class Expense {
         amount: (m['amount'] as num).toDouble(),
         note: (m['note'] as String?) ?? '',
         date: DateTime.parse(m['date'] as String),
+        currency: (m['currency'] as String?) ?? '',
+        originalAmount: ((m['originalAmount'] as num?) ?? 0).toDouble(),
       );
 }
 
