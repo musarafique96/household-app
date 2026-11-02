@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -25,17 +26,8 @@ class ExpensesScreen extends StatefulWidget {
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
   final DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  late Future<_ExpenseData?> _future;
 
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<_ExpenseData?> _load() async {
-    final user = Session.current.value;
-    if (user == null) return null;
+  Future<_ExpenseData> _load(AppUser user) async {
     final cats = await Db.instance.categories(user.id);
     final exps = await Db.instance.expenses(user.id, _month);
     final rates = await Db.instance.exchangeRates(user.id);
@@ -43,16 +35,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   void _refresh() {
-    setState(() {
-      _future = _load();
-    });
+    setState(() {});
   }
 
   void _snack(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _add(AppUser user, _ExpenseData data) async {
+  Future<void> _add(AppUser user) async {
+    // Load fresh data so categories added in the Budget tab are visible.
+    final data = await _load(user);
+    if (!mounted) return;
+
     if (data.categories.isEmpty) {
       _snack('Add a budget category in the Budget tab first.');
       return;
@@ -62,10 +56,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final noteCtrl = TextEditingController();
     var selected = data.categories.first;
     var currency = user.currency;
-    final codes = [
-      user.currency,
-      ...data.rates.keys.where((c) => c != user.currency),
-    ];
+    final codes = currencyChoices(
+      extra: user.currency,
+      exclude: const [],
+    ).where((c) => c == user.currency || data.rates.containsKey(c)).toList();
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -203,9 +197,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         if (user == null) {
           return const Center(child: Text('Choose an account in the Accounts tab first.'));
         }
-        return FutureBuilder<_ExpenseData?>(
+        return FutureBuilder<_ExpenseData>(
           key: ValueKey('expenses-${user.id}'),
-          future: _future,
+          future: _load(user),
           builder: (context, snap) {
             final data = snap.data;
             final names = {for (final c in data?.categories ?? const <Category>[]) c.id: c.name};
@@ -218,10 +212,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 foregroundColor: Colors.white,
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add expense'),
-                onPressed: () async {
-                  final d = await _future;
-                  if (d != null && mounted) await _add(user, d);
-                },
+                onPressed: () => _add(user),
               ),
               body: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 56, 16, 100),
@@ -232,13 +223,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   Text('${monthLabel(_month)} • ${money(total, user.currency)}',
                       style: const TextStyle(color: AppColors.muted)),
                   const SizedBox(height: 16),
-                  if (!snap.hasData)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
+                  if (data == null)
+                    if (snap.hasError)
+                      SoftCard(child: Text('Could not load expenses: ${snap.error}'))
+                    else
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
                   else if (exps.isEmpty)
                     const SoftCard(child: Text('No expenses this month yet.'))
                   else

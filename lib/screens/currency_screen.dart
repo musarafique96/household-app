@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -40,19 +41,27 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
   }
 
   Future<void> _addRate(AppUser user) async {
-    final codeCtrl = TextEditingController();
     final rateCtrl = TextEditingController();
+    final choices = currencyChoices(exclude: [user.currency]);
+    String? code = choices.first;
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
         title: const Text('Add exchange rate'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: codeCtrl,
-              decoration: const InputDecoration(labelText: 'Currency code (e.g. USD)'),
+            DropdownButtonFormField<String>(
+              value: code,
+              decoration: const InputDecoration(labelText: 'Currency'),
+              items: [
+                for (final c in choices) DropdownMenuItem(value: c, child: Text(c)),
+              ],
+              onChanged: (v) {
+                if (v != null) setDialog(() => code = v);
+              },
             ),
             const SizedBox(height: 8),
             TextField(
@@ -68,26 +77,20 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
         ],
+        ),
       ),
     );
     if (ok != true || !mounted) return;
 
-    final code = codeCtrl.text.trim().toUpperCase();
+    final chosen = code;
     final rate = double.tryParse(rateCtrl.text.trim());
-    if (!RegExp(r'^[A-Z]{3}$').hasMatch(code)) {
-      _snack('Enter a 3-letter currency code, such as USD.');
-      return;
-    }
-    if (code == user.currency) {
-      _snack('${user.currency} is already your account currency.');
-      return;
-    }
+    if (chosen == null) return;
     if (rate == null || rate <= 0) {
       _snack('Enter a rate above zero.');
       return;
     }
 
-    await Db.instance.setExchangeRate(user.id, code, rate);
+    await Db.instance.setExchangeRate(user.id, chosen, rate);
     _refresh();
   }
 

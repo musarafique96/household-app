@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -49,35 +50,43 @@ class _AccountScreenState extends State<AccountScreen> {
     String currency = 'SAR',
   }) async {
     final nameCtrl = TextEditingController(text: name);
-    final currCtrl = TextEditingController(text: currency);
+    final choices = currencyChoices(extra: currency);
+    var code = currency;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: currCtrl,
-              decoration: const InputDecoration(labelText: 'Currency code (SAR, PKR, USD)'),
-            ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: code,
+                decoration: const InputDecoration(labelText: 'Currency'),
+                items: [
+                  for (final c in choices) DropdownMenuItem(value: c, child: Text(c)),
+                ],
+                onChanged: (v) {
+                  if (v != null) setDialog(() => code = v);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
       ),
     );
     final n = nameCtrl.text.trim();
-    final c = currCtrl.text.trim().toUpperCase();
-    if (ok != true || n.isEmpty || c.isEmpty) return null;
-    return (n, c);
+    if (ok != true || n.isEmpty || code.isEmpty) return null;
+    return (n, code);
   }
 
   Future<void> _createAccount() async {
