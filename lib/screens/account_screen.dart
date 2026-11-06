@@ -359,7 +359,7 @@ class _AccountCard extends StatelessWidget {
               children: [
                 Text(user.name,
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                Text(primary ? 'Primary • ${user.currency}' : user.currency,
+                Text([if (primary) 'Primary', if (user.isAdmin) 'Admin', user.currency].join(' • '),
                     style: const TextStyle(color: AppColors.muted, fontSize: 12)),
               ],
             ),

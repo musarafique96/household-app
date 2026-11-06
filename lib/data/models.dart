@@ -6,6 +6,8 @@ class AppUser {
   final String currency;
 
   final String username;
+  /// 'admin' or 'member'.
+  final String role;
   final String phone;
   final String email;
   final String address;
@@ -17,6 +19,7 @@ class AppUser {
     required this.name,
     required this.currency,
     this.username = '',
+    this.role = 'member',
     this.phone = '',
     this.email = '',
     this.address = '',
@@ -28,6 +31,7 @@ class AppUser {
         name: m['name'] as String,
         currency: m['currency'] as String,
         username: (m['username'] as String?) ?? '',
+        role: (m['role'] as String?) ?? 'member',
         phone: (m['phone'] as String?) ?? '',
         email: (m['email'] as String?) ?? '',
         address: (m['address'] as String?) ?? '',

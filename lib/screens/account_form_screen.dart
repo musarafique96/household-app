@@ -107,6 +107,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         email: _email.text.trim(),
         address: _address.text.trim(),
         dateOfBirth: _dob,
+        role: widget.user?.role ?? 'member',
       ),
       password: password.isEmpty ? null : password,
     );

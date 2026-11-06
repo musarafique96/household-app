@@ -23,10 +23,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\')');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\')');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -43,6 +43,9 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 7) {
+          await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
+        }
         if (oldVersion < 6) {
           for (final col in ['username', 'passwordHash', 'salt']) {
             await db.execute("ALTER TABLE users ADD COLUMN $col TEXT NOT NULL DEFAULT ''");
@@ -99,6 +102,7 @@ class Db {
     final db = await _database;
     final values = <String, Object?>{
       'username': user.username,
+      'role': user.role,
       'name': user.name,
       'currency': user.currency,
       'phone': user.phone,
@@ -122,12 +126,55 @@ class Db {
     return AppUser(
       id: id,
       username: user.username,
+      role: user.role,
       name: user.name,
       currency: user.currency,
       phone: user.phone,
       email: user.email,
       address: user.address,
       dateOfBirth: user.dateOfBirth,
+    );
+  }
+
+  /// Makes sure the default admin account exists (username musa, admin role).
+  /// An existing account named Musa is promoted instead of duplicated.
+  Future<void> ensureDefaultAdmin() async {
+    const username = 'musa';
+    const password = 'musa181214';
+    final db = await _database;
+
+    final existing = await findByUsername(username);
+    if (existing != null) {
+      if (!existing.isAdmin) {
+        await db.update('users', {'role': 'admin'}, where: 'id = ?', whereArgs: [existing.id]);
+        DataChanges.bump();
+      }
+      return;
+    }
+
+    final rows = await db.query(
+      'users',
+      where: 'name = ? COLLATE NOCASE',
+      whereArgs: ['Musa'],
+      orderBy: 'id',
+      limit: 1,
+    );
+    final base = rows.isNotEmpty
+        ? AppUser.fromMap(rows.first)
+        : const AppUser(id: 0, username: username, name: 'Musa', currency: 'PKR');
+    await saveUser(
+      AppUser(
+        id: base.id,
+        username: username,
+        name: base.name,
+        currency: base.currency,
+        phone: base.phone,
+        email: base.email,
+        address: base.address,
+        dateOfBirth: base.dateOfBirth,
+        role: 'admin',
+      ),
+      password: password,
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
+import 'data/db.dart';
 import 'data/models.dart';
 import 'screens/account_screen.dart';
 import 'screens/budget_screen.dart';
@@ -14,6 +15,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.load();
+  await Db.instance.ensureDefaultAdmin();
   Session.restore();
   runApp(const HouseholdApp());
 }
