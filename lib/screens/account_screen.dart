@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/data_refresh.dart';
-import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
+import 'account_form_screen.dart';
 import 'group_detail_screen.dart';
 
 class _AccountsData {
@@ -50,71 +50,12 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
     });
   }
 
-  /// Shows a name and currency dialog. Returns null if cancelled.
-  Future<(String, String)?> _accountDialog({
-    required String title,
-    String name = '',
-    String currency = 'SAR',
-  }) async {
-    final nameCtrl = TextEditingController(text: name);
-    final choices = currencyChoices(extra: currency);
-    var code = currency;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => FancyAlert(
-          title: Text(title),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: code,
-                decoration: const InputDecoration(labelText: 'Currency'),
-                items: [
-                  for (final c in choices) DropdownMenuItem(value: c, child: Text(c)),
-                ],
-                onChanged: (v) {
-                  if (v != null) setDialog(() => code = v);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-          ],
-        ),
-      ),
+  /// Opens the account form page to add a new account or edit one.
+  Future<void> _openForm(AppUser? user) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AccountFormScreen(user: user)),
     );
-    final n = nameCtrl.text.trim();
-    if (ok != true || n.isEmpty || code.isEmpty) return null;
-    return (n, code);
-  }
-
-  Future<void> _createAccount() async {
-    final result = await _accountDialog(title: 'Create account', currency: 'SAR');
-    if (result == null) return;
-    await Db.instance.addUser(result.$1, result.$2);
-    _refresh();
-  }
-
-  Future<void> _editAccount(AppUser u) async {
-    final result = await _accountDialog(
-      title: 'Edit account',
-      name: u.name,
-      currency: u.currency,
-    );
-    if (result == null) return;
-    await Db.instance.updateUser(u.id, result.$1, result.$2);
-    if (Session.current.value?.id == u.id) {
-      await Session.select(AppUser(id: u.id, name: result.$1, currency: result.$2));
-    }
-    _refresh();
+    if (saved == true) _refresh();
   }
 
   Future<void> _createGroup(List<AppUser> users) async {
@@ -197,7 +138,7 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                           const Spacer(),
                           IconButton(
                             tooltip: 'Create account',
-                            onPressed: _createAccount,
+                            onPressed: () => _openForm(null),
                             icon: const Icon(Icons.add_rounded, color: Colors.white),
                           ),
                         ],
@@ -244,7 +185,7 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               user: d.users[i],
                               primary: i == 0,
                               isCurrent: current?.id == d.users[i].id,
-                              onEdit: () => _editAccount(d.users[i]),
+                              onEdit: () => _openForm(d.users[i]),
                             ),
                           ),
                       ] else ...[
@@ -304,7 +245,7 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               color: AppColors.primary,
                               onTap: () {
                                 if (current != null) {
-                                  _editAccount(current);
+                                  _openForm(current);
                                 } else {
                                   _snack('Choose an account first.');
                                 }
@@ -328,20 +269,11 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               color: AppColors.amber,
                               onTap: () {
                                 if (current != null) {
-                                  _editAccount(current);
+                                  _openForm(current);
                                 } else {
                                   _snack('Choose an account first.');
                                 }
                               },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: QuickTile(
-                              icon: Icons.archive_rounded,
-                              label: 'Archive',
-                              color: AppColors.blue,
-                              onTap: () => _snack('Archiving is coming in a later update.'),
                             ),
                           ),
                         ],

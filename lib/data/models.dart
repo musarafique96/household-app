@@ -5,12 +5,30 @@ class AppUser {
   final String name;
   final String currency;
 
-  const AppUser({required this.id, required this.name, required this.currency});
+  final String phone;
+  final String email;
+  final String address;
+  /// yyyy-MM-dd, or '' if not given.
+  final String dateOfBirth;
+
+  const AppUser({
+    required this.id,
+    required this.name,
+    required this.currency,
+    this.phone = '',
+    this.email = '',
+    this.address = '',
+    this.dateOfBirth = '',
+  });
 
   factory AppUser.fromMap(Map<String, Object?> m) => AppUser(
         id: m['id'] as int,
         name: m['name'] as String,
         currency: m['currency'] as String,
+        phone: (m['phone'] as String?) ?? '',
+        email: (m['email'] as String?) ?? '',
+        address: (m['address'] as String?) ?? '',
+        dateOfBirth: (m['dateOfBirth'] as String?) ?? '',
       );
 }
 

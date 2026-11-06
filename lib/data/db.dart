@@ -22,10 +22,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL)');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -42,6 +42,11 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 5) {
+          for (final col in ['phone', 'email', 'address', 'dateOfBirth']) {
+            await db.execute("ALTER TABLE users ADD COLUMN $col TEXT NOT NULL DEFAULT ''");
+          }
+        }
         if (oldVersion < 2) {
           await db.execute(
               'ALTER TABLE shared ADD COLUMN groupId INTEGER NOT NULL DEFAULT 0');
@@ -79,10 +84,35 @@ class Db {
     return rows.map(AppUser.fromMap).toList();
   }
 
-  Future<void> addUser(String name, String currency) async {
+  /// Adds a new account (when [AppUser.id] is 0) or updates an existing one.
+  /// Returns the saved account with its id.
+  Future<AppUser> saveUser(AppUser user) async {
     final db = await _database;
-    await db.insert('users', {'name': name, 'currency': currency});
+    final values = <String, Object?>{
+      'name': user.name,
+      'currency': user.currency,
+      'phone': user.phone,
+      'email': user.email,
+      'address': user.address,
+      'dateOfBirth': user.dateOfBirth,
+    };
+    final int id;
+    if (user.id == 0) {
+      id = await db.insert('users', values);
+    } else {
+      await db.update('users', values, where: 'id = ?', whereArgs: [user.id]);
+      id = user.id;
+    }
     DataChanges.bump();
+    return AppUser(
+      id: id,
+      name: user.name,
+      currency: user.currency,
+      phone: user.phone,
+      email: user.email,
+      address: user.address,
+      dateOfBirth: user.dateOfBirth,
+    );
   }
 
   // Budget categories
@@ -216,17 +246,6 @@ class Db {
     for (final m in memberIds) {
       await db.insert('group_members', {'groupId': id, 'userId': m});
     }
-    DataChanges.bump();
-  }
-
-  Future<void> updateUser(int id, String name, String currency) async {
-    final db = await _database;
-    await db.update(
-      'users',
-      {'name': name, 'currency': currency},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
     DataChanges.bump();
   }
 
