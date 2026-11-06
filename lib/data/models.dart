@@ -14,6 +14,8 @@ class AppUser {
   /// yyyy-MM-dd, or '' if not given.
   final String dateOfBirth;
 
+  bool get isAdmin => role == 'admin';
+
   const AppUser({
     required this.id,
     required this.name,
