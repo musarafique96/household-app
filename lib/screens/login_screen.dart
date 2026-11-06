@@ -146,9 +146,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   InputDecoration _field(String label, IconData icon, {Widget? suffix}) {
+    // A plain hint that disappears when typing, so nothing is clipped at the top edge.
     return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: AppColors.muted),
+      hintText: label,
+      hintStyle: const TextStyle(color: AppColors.muted, fontSize: 16),
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       prefixIcon: Icon(icon, color: AppColors.primary),
       suffixIcon: suffix,
       filled: true,
