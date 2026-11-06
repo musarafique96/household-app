@@ -4,6 +4,8 @@ import '../auth.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../quick_login.dart';
+import '../widgets/pin_pad.dart';
+import 'biometrics_intro_screen.dart';
 import 'passkey_screen.dart';
 import '../session.dart';
 import '../theme.dart';
@@ -25,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   String? _error;
   AppUser? _quickUser;
+  bool _useFormLogin = false;
+  String _pin = '';
 
   @override
   void initState() {
@@ -38,6 +42,85 @@ class _LoginScreenState extends State<LoginScreen> {
     final users = await Db.instance.activeUsers();
     final match = users.where((u) => u.id == id).toList();
     if (match.isNotEmpty && mounted) setState(() => _quickUser = match.first);
+  }
+
+  void _pinDigit(String digit) {
+    if (_pin.length >= 6) return;
+    setState(() {
+      _pin += digit;
+      _error = null;
+    });
+    if (_pin.length == 6) _checkPin();
+  }
+
+  void _pinBackspace() {
+    if (_pin.isEmpty) return;
+    setState(() => _pin = _pin.substring(0, _pin.length - 1));
+  }
+
+  Future<void> _checkPin() async {
+    final user = _quickUser;
+    if (user == null) return;
+    final ok = await Db.instance.checkPasskey(user.id, _pin);
+    if (!mounted) return;
+    if (ok) {
+      await Session.select(user);
+    } else {
+      setState(() {
+        _pin = '';
+        _error = 'Wrong passkey. Try again.';
+      });
+    }
+  }
+
+  /// Passkey sign-in screen, shown when the quick-login account has a passkey on.
+  Widget _pinLogin() {
+    final user = _quickUser!;
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Sign in with username and password',
+                onPressed: () => setState(() => _useFormLogin = true),
+                icon: const Icon(Icons.logout_rounded, size: 28, color: AppColors.ink),
+              ),
+            ),
+            const Spacer(),
+            PinDots(filled: _pin.length),
+            const SizedBox(height: 36),
+            Text('Hi ${user.name.toUpperCase()}',
+                style: const TextStyle(
+                    color: AppColors.ink, fontSize: 26, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text('Enter your passkey',
+                style: TextStyle(color: AppColors.ink, fontSize: 16)),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 22,
+              child: Text(_error ?? '',
+                  style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
+            ),
+            TextButton(
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Ask the admin to set a new password for you.'))),
+              child: const Text('Forgot password?',
+                  style: TextStyle(color: AppColors.ink, fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+            const Spacer(),
+            PinKeypad(
+              onDigit: _pinDigit,
+              onBackspace: _pinBackspace,
+              textColor: AppColors.ink,
+              bottomLeft: _FingerprintKey(onTap: _quickSignIn),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Signs in with fingerprint or face for the account that has quick login.
@@ -68,29 +151,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!await QuickLogin.wasPrompted() && await QuickLogin.canUseBiometrics()) {
       await QuickLogin.markPrompted();
       if (!mounted) return;
-      final wantsIt = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => FancyAlert(
-          icon: Icons.fingerprint_rounded,
-          title: const Text('Enable quick login?'),
-          content: const Text(
-            'Sign in next time with your fingerprint or face instead of typing your password.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Not now'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Enable'),
-            ),
-          ],
-        ),
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => BiometricsIntroScreen(user: user)),
       );
-      if (wantsIt == true && await QuickLogin.authenticate('Confirm to enable quick login')) {
-        await QuickLogin.enable(user.id);
-      }
     }
     await Session.select(user);
   }
@@ -240,6 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_quickUser?.passkeyEnabled == true && !_useFormLogin) return _pinLogin();
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -538,6 +602,31 @@ class _QuickButton extends StatelessWidget {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ],
+    );
+  }
+}
+
+class _FingerprintKey extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _FingerprintKey({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        color: AppColors.deep,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: const SizedBox(
+            width: 64,
+            height: 64,
+            child: Icon(Icons.fingerprint_rounded, color: Colors.white, size: 36),
+          ),
+        ),
+      ),
     );
   }
 }
