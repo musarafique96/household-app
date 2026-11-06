@@ -23,10 +23,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0)');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0)');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -43,6 +43,11 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 9) {
+          await db.execute("ALTER TABLE users ADD COLUMN passkeyHash TEXT NOT NULL DEFAULT ''");
+          await db.execute("ALTER TABLE users ADD COLUMN passkeySalt TEXT NOT NULL DEFAULT ''");
+          await db.execute('ALTER TABLE users ADD COLUMN passkeyEnabled INTEGER NOT NULL DEFAULT 0');
+        }
         if (oldVersion < 8) {
           await db.execute('ALTER TABLE users ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
         }
@@ -147,6 +152,40 @@ class Db {
     final db = await _database;
     await db.update('users', {'deleted': 1}, where: 'id = ?', whereArgs: [id]);
     DataChanges.bump();
+  }
+
+  /// Saves a new 6-digit passkey for the account and switches it on.
+  Future<void> setPasskey(int userId, String pin) async {
+    final db = await _database;
+    final salt = Auth.newSalt();
+    await db.update(
+      'users',
+      {'passkeySalt': salt, 'passkeyHash': Auth.hash(salt, pin), 'passkeyEnabled': 1},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+    DataChanges.bump();
+  }
+
+  Future<void> setPasskeyEnabled(int userId, bool on) async {
+    final db = await _database;
+    await db.update('users', {'passkeyEnabled': on ? 1 : 0},
+        where: 'id = ?', whereArgs: [userId]);
+    DataChanges.bump();
+  }
+
+  /// True if [pin] matches the account's saved passkey.
+  Future<bool> checkPasskey(int userId, String pin) async {
+    final db = await _database;
+    final rows = await db.query('users',
+        columns: ['passkeyHash', 'passkeySalt'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1);
+    if (rows.isEmpty) return false;
+    final hash = (rows.first['passkeyHash'] as String?) ?? '';
+    if (hash.isEmpty) return false;
+    return Auth.verify((rows.first['passkeySalt'] as String?) ?? '', hash, pin);
   }
 
   /// Accounts that can still be used. Deleted accounts are left out.

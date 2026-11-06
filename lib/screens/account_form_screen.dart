@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../currencies.dart';
 import '../quick_login.dart';
+import 'passkey_screen.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -40,6 +41,8 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   String? _error;
   bool _usernameTaken = false;
   bool _quickOn = false;
+  bool _hasPasskey = false;
+  bool _passkeyOn = false;
   final _scroll = ScrollController();
 
   bool get _isNew => widget.user == null;
@@ -60,6 +63,8 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     _address = TextEditingController(text: u?.address ?? '');
     _currency = u?.currency ?? 'SAR';
     _dob = u?.dateOfBirth ?? '';
+    _hasPasskey = u?.hasPasskey ?? false;
+    _passkeyOn = u?.passkeyEnabled ?? false;
     if (_isSignedInUser) _loadQuick();
   }
 
@@ -151,6 +156,27 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         _showError('Could not save the account. $e');
       }
     }
+  }
+
+  /// Turning passkey on asks to set one only the first time; after that it is reused.
+  Future<void> _togglePasskey(bool on) async {
+    final user = widget.user;
+    if (user == null) return;
+    if (on && !_hasPasskey) {
+      final saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => PasskeyScreen(user: user, setup: true)),
+      );
+      if (saved != true) return;
+      if (mounted) {
+        setState(() {
+          _hasPasskey = true;
+          _passkeyOn = true;
+        });
+      }
+      return;
+    }
+    await Db.instance.setPasskeyEnabled(user.id, on);
+    if (mounted) setState(() => _passkeyOn = on);
   }
 
   Future<void> _toggleQuick(bool on) async {
@@ -421,6 +447,21 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                             'Sign in with your fingerprint or face on this phone'),
                         value: _quickOn,
                         onChanged: _toggleQuick,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SoftCard(
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.pin_rounded,
+                            color: AppColors.primary, size: 30),
+                        title: const Text('Passkey',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text(_hasPasskey
+                            ? 'Your 6-digit passkey is set'
+                            : 'Sign in with a 6-digit passkey'),
+                        value: _passkeyOn,
+                        onChanged: _togglePasskey,
                       ),
                     ),
                     const SizedBox(height: 14),

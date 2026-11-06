@@ -10,6 +10,10 @@ class AppUser {
   final String role;
   /// Deleted accounts can't sign in or add anything, but keep their past expenses.
   final bool deleted;
+  /// True if a 6-digit passkey has been set for this account.
+  final bool hasPasskey;
+  /// True if the passkey is switched on for sign-in.
+  final bool passkeyEnabled;
   final String phone;
   final String email;
   final String address;
@@ -25,6 +29,8 @@ class AppUser {
     this.username = '',
     this.role = 'member',
     this.deleted = false,
+    this.hasPasskey = false,
+    this.passkeyEnabled = false,
     this.phone = '',
     this.email = '',
     this.address = '',
@@ -38,6 +44,8 @@ class AppUser {
         username: (m['username'] as String?) ?? '',
         role: (m['role'] as String?) ?? 'member',
         deleted: ((m['deleted'] as num?) ?? 0) == 1,
+        hasPasskey: ((m['passkeyHash'] as String?) ?? '').isNotEmpty,
+        passkeyEnabled: ((m['passkeyEnabled'] as num?) ?? 0) == 1,
         phone: (m['phone'] as String?) ?? '',
         email: (m['email'] as String?) ?? '',
         address: (m['address'] as String?) ?? '',

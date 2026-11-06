@@ -4,6 +4,7 @@ import '../auth.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../quick_login.dart';
+import 'passkey_screen.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
@@ -50,6 +51,16 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     await Session.select(user);
+  }
+
+  /// Signs in with the 6-digit passkey for the quick-login account.
+  Future<void> _quickPasskey() async {
+    final user = _quickUser;
+    if (user == null) return;
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => PasskeyScreen(user: user, setup: false)),
+    );
+    if (ok == true && mounted) await Session.select(user);
   }
 
   /// Runs after a successful password sign-in. Offers quick login once per phone.
@@ -304,6 +315,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               if (_quickUser != null) ...[
                                 _QuickButton(name: _quickUser!.name, onTap: _quickSignIn),
+                                if (_quickUser!.passkeyEnabled) ...[
+                                  const SizedBox(height: 8),
+                                  TextButton.icon(
+                                    onPressed: _quickPasskey,
+                                    style: TextButton.styleFrom(foregroundColor: Colors.white),
+                                    icon: const Icon(Icons.pin_rounded),
+                                    label: const Text('Use passkey instead',
+                                        style: TextStyle(fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
                                 const SizedBox(height: 18),
                                 Row(
                                   children: [
