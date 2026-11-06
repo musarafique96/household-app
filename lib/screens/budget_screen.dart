@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../budget_math.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -45,7 +46,12 @@ class BudgetScreen extends StatefulWidget {
   State<BudgetScreen> createState() => _BudgetScreenState();
 }
 
-class _BudgetScreenState extends State<BudgetScreen> {
+class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<BudgetScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
   late Future<_BudgetData?> _future;
 

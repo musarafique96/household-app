@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -22,7 +23,12 @@ class AccountScreen extends StatefulWidget {
   State<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreenState extends State<AccountScreen> with DataRefreshState<AccountScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   bool _showGroups = false;
   late Future<_AccountsData> _future;
 

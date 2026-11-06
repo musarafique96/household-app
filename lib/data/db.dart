@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../util.dart';
+import 'data_changes.dart';
 import 'models.dart';
 
 /// Offline local database. A future online backend can replace this class
@@ -81,6 +82,7 @@ class Db {
   Future<void> addUser(String name, String currency) async {
     final db = await _database;
     await db.insert('users', {'name': name, 'currency': currency});
+    DataChanges.bump();
   }
 
   // Budget categories
@@ -102,6 +104,7 @@ class Db {
       'name': name,
       'monthlyLimit': monthlyLimit,
     });
+    DataChanges.bump();
   }
 
   // Expenses
@@ -151,6 +154,7 @@ class Db {
       'currency': currency,
       'originalAmount': originalAmount ?? amount,
     });
+    DataChanges.bump();
   }
 
   // Exchange rates: how much one unit of a currency is worth in the account currency.
@@ -176,6 +180,7 @@ class Db {
       {'userId': userId, 'currency': currency, 'rate': rate},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    DataChanges.bump();
   }
 
   Future<void> deleteExchangeRate(int userId, String currency) async {
@@ -185,6 +190,7 @@ class Db {
       where: 'userId = ? AND currency = ?',
       whereArgs: [userId, currency],
     );
+    DataChanges.bump();
   }
 
   // Groups
@@ -210,6 +216,7 @@ class Db {
     for (final m in memberIds) {
       await db.insert('group_members', {'groupId': id, 'userId': m});
     }
+    DataChanges.bump();
   }
 
   Future<void> updateUser(int id, String name, String currency) async {
@@ -220,6 +227,7 @@ class Db {
       where: 'id = ?',
       whereArgs: [id],
     );
+    DataChanges.bump();
   }
 
   Future<void> updateGroupMembers(int groupId, List<int> memberIds) async {
@@ -230,6 +238,7 @@ class Db {
         await txn.insert('group_members', {'groupId': groupId, 'userId': m});
       }
     });
+    DataChanges.bump();
   }
 
   // Recurring expenses
@@ -260,11 +269,13 @@ class Db {
       'day': day,
       'lastApplied': '',
     });
+    DataChanges.bump();
   }
 
   Future<void> deleteRecurring(int id) async {
     final db = await _database;
     await db.delete('recurring', where: 'id = ?', whereArgs: [id]);
+    DataChanges.bump();
   }
 
   /// Adds this month's recurring expenses that are due on or before [now].
@@ -293,6 +304,7 @@ class Db {
       );
       added++;
     }
+    if (added > 0) DataChanges.bump();
     return added;
   }
 
@@ -326,5 +338,6 @@ class Db {
       'splitMethod': splitMethod,
       'shares': sharesText,
     });
+    DataChanges.bump();
   }
 }

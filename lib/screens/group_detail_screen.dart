@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -25,7 +26,12 @@ class GroupDetailScreen extends StatefulWidget {
   State<GroupDetailScreen> createState() => _GroupDetailScreenState();
 }
 
-class _GroupDetailScreenState extends State<GroupDetailScreen> {
+class _GroupDetailScreenState extends State<GroupDetailScreen> with DataRefreshState<GroupDetailScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   late Future<_GroupData> _future;
 
   @override

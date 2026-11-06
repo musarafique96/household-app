@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../data/db.dart';
 import '../session.dart';
 import '../split_math.dart';
@@ -49,7 +50,12 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with DataRefreshState<DashboardScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   _Period _period = _Period.m1;
   late Future<_DashData?> _future;
 

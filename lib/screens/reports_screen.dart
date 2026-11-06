@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+import '../widgets/data_refresh.dart';import 'package:flutter/services.dart';
 
 import '../budget_math.dart';
 import '../data/db.dart';
@@ -32,7 +33,12 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class _ReportsScreenState extends State<ReportsScreen> with DataRefreshState<ReportsScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   final DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   late DateTime _month = _currentMonth;
   late Future<_ReportData?> _future;

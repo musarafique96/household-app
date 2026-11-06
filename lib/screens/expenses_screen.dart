@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -24,7 +25,12 @@ class ExpensesScreen extends StatefulWidget {
   State<ExpensesScreen> createState() => _ExpensesScreenState();
 }
 
-class _ExpensesScreenState extends State<ExpensesScreen> {
+class _ExpensesScreenState extends State<ExpensesScreen> with DataRefreshState<ExpensesScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() {});
+  }
+
   final DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   Future<_ExpenseData> _load(AppUser user) async {

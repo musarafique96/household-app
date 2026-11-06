@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../currencies.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -16,7 +17,12 @@ class CurrencyScreen extends StatefulWidget {
   State<CurrencyScreen> createState() => _CurrencyScreenState();
 }
 
-class _CurrencyScreenState extends State<CurrencyScreen> {
+class _CurrencyScreenState extends State<CurrencyScreen> with DataRefreshState<CurrencyScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   late Future<Map<String, double>?> _future;
 
   @override

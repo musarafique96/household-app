@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+import '../widgets/data_refresh.dart';import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -27,7 +28,12 @@ class ExportScreen extends StatefulWidget {
   State<ExportScreen> createState() => _ExportScreenState();
 }
 
-class _ExportScreenState extends State<ExportScreen> {
+class _ExportScreenState extends State<ExportScreen> with DataRefreshState<ExportScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   final DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   late DateTime _month = _currentMonth;
   late Future<_ExportData?> _future;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -42,7 +43,12 @@ class SplitScreen extends StatefulWidget {
   State<SplitScreen> createState() => _SplitScreenState();
 }
 
-class _SplitScreenState extends State<SplitScreen> {
+class _SplitScreenState extends State<SplitScreen> with DataRefreshState<SplitScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   int? _groupId; // null means all groups together
   late Future<_SplitData> _future;
 

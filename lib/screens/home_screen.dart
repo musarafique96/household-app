@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/data_refresh.dart';
 import '../budget_math.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -41,7 +42,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScreen> {
+  @override
+  void onDataChanged() {
+    if (mounted) setState(() { _future = _load(); });
+  }
+
   final DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
   late Future<_HomeData?> _future;
 
