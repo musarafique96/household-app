@@ -16,7 +16,7 @@ class Session {
     final id = prefs.getInt(_key);
     if (id == null) return;
 
-    final users = await Db.instance.users();
+    final users = await Db.instance.activeUsers();
     for (final u in users) {
       if (u.id == id) {
         current.value = u;

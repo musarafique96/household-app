@@ -8,6 +8,8 @@ class AppUser {
   final String username;
   /// 'admin' or 'member'.
   final String role;
+  /// Deleted accounts can't sign in or add anything, but keep their past expenses.
+  final bool deleted;
   final String phone;
   final String email;
   final String address;
@@ -22,6 +24,7 @@ class AppUser {
     required this.currency,
     this.username = '',
     this.role = 'member',
+    this.deleted = false,
     this.phone = '',
     this.email = '',
     this.address = '',
@@ -34,6 +37,7 @@ class AppUser {
         currency: m['currency'] as String,
         username: (m['username'] as String?) ?? '',
         role: (m['role'] as String?) ?? 'member',
+        deleted: ((m['deleted'] as num?) ?? 0) == 1,
         phone: (m['phone'] as String?) ?? '',
         email: (m['email'] as String?) ?? '',
         address: (m['address'] as String?) ?? '',

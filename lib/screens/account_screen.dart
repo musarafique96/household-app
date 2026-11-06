@@ -40,7 +40,7 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
   }
 
   Future<_AccountsData> _load() async {
-    final users = await Db.instance.users();
+    final users = await Db.instance.activeUsers();
     final groups = await Db.instance.groups();
     return _AccountsData(users, groups);
   }
@@ -68,8 +68,8 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
         color: AppColors.red,
         title: Text('Delete ${u.name}?'),
         content: const Text(
-          'This removes the account with its expenses, budget categories and recurring bills. '
-          'Shared bills it paid stay in Split. This cannot be undone.',
+          'They will no longer be able to sign in or add expenses. '
+          'Their past expenses stay in your monthly totals and reports.',
         ),
         actions: [
           TextButton(

@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loadQuickUser() async {
     final id = await QuickLogin.enabledUserId();
     if (id == null) return;
-    final users = await Db.instance.users();
+    final users = await Db.instance.activeUsers();
     final match = users.where((u) => u.id == id).toList();
     if (match.isNotEmpty && mounted) setState(() => _quickUser = match.first);
   }

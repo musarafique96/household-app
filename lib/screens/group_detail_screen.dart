@@ -68,7 +68,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> with DataRefreshS
           builder: (ctx, setDialog) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final u in d.users)
+              for (final u in d.users.where((u) => !u.deleted || selected.contains(u.id)))
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: selected.contains(u.id),

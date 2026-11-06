@@ -14,6 +14,9 @@ class _SplitData {
   final List<AppUser> users;
   final List<Group> groups;
   final List<SharedExpense> shared;
+
+  /// Accounts that can be picked for a new bill.
+  List<AppUser> get activeUsers => users.where((u) => !u.deleted).toList();
   const _SplitData(this.users, this.groups, this.shared);
 }
 
@@ -76,10 +79,10 @@ class _SplitScreenState extends State<SplitScreen> with DataRefreshState<SplitSc
 
   /// People who can take part in an expense: a group's members, or everyone.
   List<AppUser> _candidates(_SplitData d, int groupId) {
-    if (groupId == 0) return d.users;
+    if (groupId == 0) return d.activeUsers;
     final group = d.groups.where((g) => g.id == groupId).toList();
     if (group.isEmpty) return const [];
-    return d.users.where((u) => group.first.members.contains(u.id)).toList();
+    return d.activeUsers.where((u) => group.first.members.contains(u.id)).toList();
   }
 
   Future<void> _addShared(_SplitData d) async {
@@ -89,7 +92,7 @@ class _SplitScreenState extends State<SplitScreen> with DataRefreshState<SplitSc
     final titleCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
     final shareCtrls = <int, TextEditingController>{
-      for (final u in d.users) u.id: TextEditingController(),
+      for (final u in d.activeUsers) u.id: TextEditingController(),
     };
     var groupId = _groupId ?? 0;
     var method = 'equal';
@@ -315,7 +318,7 @@ class _SplitScreenState extends State<SplitScreen> with DataRefreshState<SplitSc
 
   Future<void> _createGroup(_SplitData d) async {
     final nameCtrl = TextEditingController();
-    final selected = <int>{for (final u in d.users) u.id};
+    final selected = <int>{for (final u in d.activeUsers) u.id};
 
     final ok = await showDialog<bool>(
       context: context,
@@ -330,7 +333,7 @@ class _SplitScreenState extends State<SplitScreen> with DataRefreshState<SplitSc
                 decoration: const InputDecoration(labelText: 'Group name (e.g. Trip to Dubai)'),
               ),
               const SizedBox(height: 8),
-              for (final u in d.users)
+              for (final u in d.activeUsers)
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: selected.contains(u.id),

@@ -23,10 +23,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\')');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0)');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -43,6 +43,9 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 8) {
+          await db.execute('ALTER TABLE users ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+        }
         if (oldVersion < 7) {
           await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
         }
@@ -103,6 +106,7 @@ class Db {
     final values = <String, Object?>{
       'username': user.username,
       'role': user.role,
+      'deleted': user.deleted ? 1 : 0,
       'name': user.name,
       'currency': user.currency,
       'phone': user.phone,
@@ -127,6 +131,7 @@ class Db {
       id: id,
       username: user.username,
       role: user.role,
+      deleted: user.deleted,
       name: user.name,
       currency: user.currency,
       phone: user.phone,
@@ -136,19 +141,19 @@ class Db {
     );
   }
 
-  /// Deletes an account and the data that belongs only to it. Shared bills it
-  /// paid stay in Split so other members' balances are not changed.
+  /// Deletes an account. Its expenses, budgets and history are kept so monthly
+  /// totals and reports stay correct, but it can no longer sign in or add anything.
   Future<void> deleteUser(int id) async {
     final db = await _database;
-    await db.transaction((txn) async {
-      await txn.delete('users', where: 'id = ?', whereArgs: [id]);
-      await txn.delete('categories', where: 'userId = ?', whereArgs: [id]);
-      await txn.delete('expenses', where: 'userId = ?', whereArgs: [id]);
-      await txn.delete('recurring', where: 'userId = ?', whereArgs: [id]);
-      await txn.delete('exchange_rates', where: 'userId = ?', whereArgs: [id]);
-      await txn.delete('group_members', where: 'userId = ?', whereArgs: [id]);
-    });
+    await db.update('users', {'deleted': 1}, where: 'id = ?', whereArgs: [id]);
     DataChanges.bump();
+  }
+
+  /// Accounts that can still be used. Deleted accounts are left out.
+  Future<List<AppUser>> activeUsers() async {
+    final db = await _database;
+    final rows = await db.query('users', where: 'deleted = 0', orderBy: 'id');
+    return rows.map(AppUser.fromMap).toList();
   }
 
   /// Makes sure the default admin account exists (username musa, admin role).
@@ -211,7 +216,7 @@ class Db {
     final db = await _database;
     final rows = await db.query(
       'users',
-      where: 'username = ? COLLATE NOCASE',
+      where: 'username = ? COLLATE NOCASE AND deleted = 0',
       whereArgs: [username.trim()],
       limit: 1,
     );
