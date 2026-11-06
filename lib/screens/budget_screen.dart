@@ -7,6 +7,7 @@ import '../session.dart';
 import '../theme.dart';
 import '../util.dart';
 import '../widgets/donut.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 
 class _BudgetData {
@@ -83,7 +84,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final limitCtrl = TextEditingController();
     final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('New budget category'),
         content: Column(
           mainAxisSize: MainAxisSize.min,

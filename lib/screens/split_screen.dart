@@ -6,6 +6,7 @@ import '../session.dart';
 import '../split_math.dart';
 import '../theme.dart';
 import '../util.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 
 class _SplitData {
@@ -312,7 +313,7 @@ class _SplitScreenState extends State<SplitScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('Create group'),
         content: StatefulBuilder(
           builder: (ctx, setDialog) => Column(
@@ -375,7 +376,7 @@ class _SplitScreenState extends State<SplitScreen> {
     }
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('Settle up?'),
         content: Text('Record ${transfers.length} payment(s) as settled.'),
         actions: [

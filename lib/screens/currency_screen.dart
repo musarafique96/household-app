@@ -5,6 +5,7 @@ import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
 import '../theme.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 
 /// Exchange rates for other currencies, in the account currency.
@@ -48,7 +49,7 @@ class _CurrencyScreenState extends State<CurrencyScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
+        builder: (ctx, setDialog) => FancyAlert(
         title: const Text('Add exchange rate'),
         content: Column(
           mainAxisSize: MainAxisSize.min,

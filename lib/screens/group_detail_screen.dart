@@ -6,6 +6,7 @@ import '../session.dart';
 import '../split_math.dart';
 import '../theme.dart';
 import '../util.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 
 class _GroupData {
@@ -55,7 +56,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: Text('Members of ${group.name}'),
         content: StatefulBuilder(
           builder: (ctx, setDialog) => Column(
@@ -106,7 +107,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   Future<void> _settleAll(List<Transfer> transfers) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('Settle all?'),
         content: Text('Record ${transfers.length} payment(s) as settled.'),
         actions: [

@@ -5,6 +5,7 @@ import '../data/models.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../util.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 
 class _RecurringData {
@@ -64,7 +65,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('New recurring expense'),
         content: StatefulBuilder(
           builder: (ctx, setDialog) => Column(
@@ -129,7 +130,7 @@ class _RecurringScreenState extends State<RecurringScreen> {
   Future<void> _delete(RecurringExpense r) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: Text('Delete ${r.name}?'),
         content: const Text('Past expenses that were already added will stay.'),
         actions: [

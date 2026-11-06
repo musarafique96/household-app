@@ -5,6 +5,7 @@ import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
 import '../theme.dart';
+import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
 import 'group_detail_screen.dart';
 
@@ -55,7 +56,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
+        builder: (ctx, setDialog) => FancyAlert(
           title: Text(title),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -116,7 +117,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => FancyAlert(
         title: const Text('Create group'),
         content: StatefulBuilder(
           builder: (ctx, setDialog) => Column(

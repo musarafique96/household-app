@@ -62,10 +62,10 @@ class _HomeShellState extends State<HomeShell> {
             index: _index,
             children: [
               HomeScreen(key: ValueKey('home-$id'), onOpenTab: _openTab),
-              const AccountScreen(key: ValueKey('account')),
               const ExpensesScreen(key: ValueKey('expenses')),
               SplitScreen(key: ValueKey('split-$id')),
               BudgetScreen(key: ValueKey('budget-$id')),
+              const AccountScreen(key: ValueKey('account')),
             ],
           ),
           bottomNavigationBar: NavigationBar(
@@ -76,11 +76,6 @@ class _HomeShellState extends State<HomeShell> {
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
                 label: 'Home',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'Accounts',
               ),
               NavigationDestination(
                 icon: Icon(Icons.wallet_outlined),
@@ -96,6 +91,11 @@ class _HomeShellState extends State<HomeShell> {
                 icon: Icon(Icons.account_balance_wallet_outlined),
                 selectedIcon: Icon(Icons.account_balance_wallet_rounded),
                 label: 'Budget',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person_rounded),
+                label: 'Accounts',
               ),
             ],
           ),
