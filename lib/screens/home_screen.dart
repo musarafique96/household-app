@@ -8,6 +8,7 @@ import '../session.dart';
 import '../theme.dart';
 import '../util.dart';
 import '../widgets/ui.dart';
+import 'account_form_screen.dart';
 import 'more_screen.dart';
 
 class _ActivityItem {
@@ -103,6 +104,17 @@ class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScree
     return 'Good evening';
   }
 
+  /// Opens the signed-in account's profile, where it can be updated.
+  void _openProfile() {
+    final user = Session.current.value;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Choose an account in the Accounts tab first.')));
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => AccountFormScreen(user: user)));
+  }
+
   void _openMore() {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MoreScreen()));
   }
@@ -126,14 +138,17 @@ class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScree
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          shape: BoxShape.circle,
+                      GestureDetector(
+                        onTap: _openProfile,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.person_rounded, color: Colors.white),
                         ),
-                        child: const Icon(Icons.groups_rounded, color: Colors.white),
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
