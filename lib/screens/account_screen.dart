@@ -277,21 +277,6 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                         children: [
                           Expanded(
                             child: QuickTile(
-                              icon: Icons.edit_rounded,
-                              label: 'Edit Account',
-                              color: AppColors.primary,
-                              onTap: () {
-                                if (current != null) {
-                                  _openForm(current);
-                                } else {
-                                  _snack('Choose an account first.');
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: QuickTile(
                               icon: Icons.people_alt_rounded,
                               label: 'Manage Members',
                               color: AppColors.pink,
