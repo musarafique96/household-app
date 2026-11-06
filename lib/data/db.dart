@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../util.dart';
+import '../auth.dart';
 import 'data_changes.dart';
 import 'models.dart';
 
@@ -22,10 +23,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\')');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -42,6 +43,13 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 6) {
+          for (final col in ['username', 'passwordHash', 'salt']) {
+            await db.execute("ALTER TABLE users ADD COLUMN $col TEXT NOT NULL DEFAULT ''");
+          }
+          // Existing accounts get a username from their name, e.g. musa_1.
+          await db.execute("UPDATE users SET username = lower(replace(name, ' ', '')) || '_' || id WHERE username = ''");
+        }
         if (oldVersion < 5) {
           for (final col in ['phone', 'email', 'address', 'dateOfBirth']) {
             await db.execute("ALTER TABLE users ADD COLUMN $col TEXT NOT NULL DEFAULT ''");
@@ -85,10 +93,12 @@ class Db {
   }
 
   /// Adds a new account (when [AppUser.id] is 0) or updates an existing one.
+  /// Pass [password] to set or change the password; it is stored hashed.
   /// Returns the saved account with its id.
-  Future<AppUser> saveUser(AppUser user) async {
+  Future<AppUser> saveUser(AppUser user, {String? password}) async {
     final db = await _database;
     final values = <String, Object?>{
+      'username': user.username,
       'name': user.name,
       'currency': user.currency,
       'phone': user.phone,
@@ -96,6 +106,11 @@ class Db {
       'address': user.address,
       'dateOfBirth': user.dateOfBirth,
     };
+    if (password != null) {
+      final salt = Auth.newSalt();
+      values['salt'] = salt;
+      values['passwordHash'] = Auth.hash(salt, password);
+    }
     final int id;
     if (user.id == 0) {
       id = await db.insert('users', values);
@@ -106,12 +121,44 @@ class Db {
     DataChanges.bump();
     return AppUser(
       id: id,
+      username: user.username,
       name: user.name,
       currency: user.currency,
       phone: user.phone,
       email: user.email,
       address: user.address,
       dateOfBirth: user.dateOfBirth,
+    );
+  }
+
+  /// Finds an account by username, ignoring case. Null if none.
+  Future<AppUser?> findByUsername(String username) async {
+    final db = await _database;
+    final rows = await db.query(
+      'users',
+      where: 'username = ? COLLATE NOCASE',
+      whereArgs: [username.trim()],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : AppUser.fromMap(rows.first);
+  }
+
+  /// The account plus its stored password hash and salt, for sign-in checks.
+  Future<({AppUser user, String passwordHash, String salt})?> credentialsFor(
+      String username) async {
+    final db = await _database;
+    final rows = await db.query(
+      'users',
+      where: 'username = ? COLLATE NOCASE',
+      whereArgs: [username.trim()],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return (
+      user: AppUser.fromMap(r),
+      passwordHash: (r['passwordHash'] as String?) ?? '',
+      salt: (r['salt'] as String?) ?? '',
     );
   }
 

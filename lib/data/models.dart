@@ -5,6 +5,7 @@ class AppUser {
   final String name;
   final String currency;
 
+  final String username;
   final String phone;
   final String email;
   final String address;
@@ -15,6 +16,7 @@ class AppUser {
     required this.id,
     required this.name,
     required this.currency,
+    this.username = '',
     this.phone = '',
     this.email = '',
     this.address = '',
@@ -25,6 +27,7 @@ class AppUser {
         id: m['id'] as int,
         name: m['name'] as String,
         currency: m['currency'] as String,
+        username: (m['username'] as String?) ?? '',
         phone: (m['phone'] as String?) ?? '',
         email: (m['email'] as String?) ?? '',
         address: (m['address'] as String?) ?? '',

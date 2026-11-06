@@ -25,6 +25,12 @@ class Session {
     }
   }
 
+  static Future<void> signOut() async {
+    current.value = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+
   static Future<void> select(AppUser user) async {
     current.value = user;
     final prefs = await SharedPreferences.getInstance();

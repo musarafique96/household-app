@@ -6,6 +6,7 @@ import 'screens/account_screen.dart';
 import 'screens/budget_screen.dart';
 import 'screens/expenses_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/split_screen.dart';
 import 'session.dart';
 import 'theme.dart';
@@ -31,7 +32,12 @@ class HouseholdApp extends StatelessWidget {
           theme: buildTheme(dark: false),
           darkTheme: buildTheme(dark: true),
           themeMode: mode,
-          home: const HomeShell(),
+          // Sign-in page until someone is signed in, then the app.
+          home: ValueListenableBuilder<AppUser?>(
+            valueListenable: Session.current,
+            builder: (context, user, _) =>
+                user == null ? const LoginScreen() : const HomeShell(),
+          ),
         );
       },
     );

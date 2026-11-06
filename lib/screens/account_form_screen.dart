@@ -8,12 +8,16 @@ import '../theme.dart';
 import '../util.dart';
 import '../widgets/ui.dart';
 
-/// Full page to add a new account, or edit an existing one.
+/// Full page to add an account (or register), or edit an existing one.
 /// Pops with `true` when saved.
+///
+/// With [signUp] the new account is signed in straight away, which is what
+/// happens when someone registers from the login page.
 class AccountFormScreen extends StatefulWidget {
   final AppUser? user;
+  final bool signUp;
 
-  const AccountFormScreen({super.key, this.user});
+  const AccountFormScreen({super.key, this.user, this.signUp = false});
 
   @override
   State<AccountFormScreen> createState() => _AccountFormScreenState();
@@ -21,6 +25,9 @@ class AccountFormScreen extends StatefulWidget {
 
 class _AccountFormScreenState extends State<AccountFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _username;
+  late final TextEditingController _password;
+  late final TextEditingController _confirm;
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late final TextEditingController _email;
@@ -28,13 +35,21 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   late String _currency;
   late String _dob;
   bool _saving = false;
+  bool _obscure = true;
+  String? _error;
 
   bool get _isNew => widget.user == null;
+
+  bool get _isSignedInUser =>
+      !_isNew && Session.current.value?.id == widget.user!.id;
 
   @override
   void initState() {
     super.initState();
     final u = widget.user;
+    _username = TextEditingController(text: u?.username ?? '');
+    _password = TextEditingController();
+    _confirm = TextEditingController();
     _name = TextEditingController(text: u?.name ?? '');
     _phone = TextEditingController(text: u?.phone ?? '');
     _email = TextEditingController(text: u?.email ?? '');
@@ -45,6 +60,9 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
 
   @override
   void dispose() {
+    _username.dispose();
+    _password.dispose();
+    _confirm.dispose();
     _name.dispose();
     _phone.dispose();
     _email.dispose();
@@ -67,30 +85,60 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   }
 
   Future<void> _save() async {
+    setState(() => _error = null);
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final username = _username.text.trim();
+    final existing = await Db.instance.findByUsername(username);
+    if (existing != null && existing.id != (widget.user?.id ?? -1)) {
+      setState(() => _error = 'That username is already taken. Choose another.');
+      return;
+    }
+
     setState(() => _saving = true);
+    final password = _password.text;
+    final saved = await Db.instance.saveUser(
+      AppUser(
+        id: widget.user?.id ?? 0,
+        username: username,
+        name: _name.text.trim(),
+        currency: _currency,
+        phone: _phone.text.trim(),
+        email: _email.text.trim(),
+        address: _address.text.trim(),
+        dateOfBirth: _dob,
+      ),
+      password: password.isEmpty ? null : password,
+    );
 
-    final saved = await Db.instance.saveUser(AppUser(
-      id: widget.user?.id ?? 0,
-      name: _name.text.trim(),
-      currency: _currency,
-      phone: _phone.text.trim(),
-      email: _email.text.trim(),
-      address: _address.text.trim(),
-      dateOfBirth: _dob,
-    ));
-
-    // Keep the signed-in account's details up to date when it is edited.
-    if (!_isNew && Session.current.value?.id == saved.id) {
+    // Sign in after registering, and keep the signed-in details up to date.
+    if (widget.signUp || _isSignedInUser) {
       await Session.select(saved);
     }
     if (mounted) Navigator.pop(context, true);
+  }
+
+  Future<void> _logOut() async {
+    await Session.signOut();
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  String? _validatePassword(String? v) {
+    final text = v ?? '';
+    if (_isNew && text.isEmpty) return 'Please enter a password';
+    if (text.isNotEmpty && text.length < 6) return 'Use at least 6 characters';
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? const Color(0xFFB7B0CC) : AppColors.muted;
+    final title = widget.signUp
+        ? 'Register'
+        : _isNew
+            ? 'New account'
+            : 'Edit account';
 
     return Scaffold(
       body: Form(
@@ -106,7 +154,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                     icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                   ),
                   const SizedBox(width: 4),
-                  Text(_isNew ? 'New account' : 'Edit account',
+                  Text(title,
                       style: const TextStyle(
                           color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                 ],
@@ -117,18 +165,84 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: CircleAvatar(
-                      radius: 42,
-                      backgroundColor: AppColors.soft,
-                      child: Text(
-                        _name.text.trim().isEmpty ? '?' : _name.text.trim()[0].toUpperCase(),
-                        style: const TextStyle(
-                            fontSize: 32, fontWeight: FontWeight.w800, color: AppColors.primary),
+                  if (_error != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.red.withAlpha(30),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: AppColors.red),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_error!,
+                                style: const TextStyle(
+                                    color: AppColors.red, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
                       ),
                     ),
+                  SoftCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Sign-in',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 15, color: muted)),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _username,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                            labelText: 'Username *',
+                            helperText: '3–20 letters, numbers, _ or .',
+                            prefixIcon: Icon(Icons.alternate_email_rounded),
+                          ),
+                          validator: (v) {
+                            final t = v?.trim() ?? '';
+                            if (t.isEmpty) return 'Please enter a username';
+                            return RegExp(r'^[a-zA-Z0-9_.]{3,20}$').hasMatch(t)
+                                ? null
+                                : 'Use 3–20 letters, numbers, _ or .';
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _password,
+                          obscureText: _obscure,
+                          decoration: InputDecoration(
+                            labelText: _isNew ? 'Password *' : 'New password (optional)',
+                            prefixIcon: const Icon(Icons.lock_rounded),
+                            suffixIcon: IconButton(
+                              tooltip: _obscure ? 'Show password' : 'Hide password',
+                              icon: Icon(_obscure
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_rounded),
+                              onPressed: () => setState(() => _obscure = !_obscure),
+                            ),
+                          ),
+                          validator: _validatePassword,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _confirm,
+                          obscureText: _obscure,
+                          decoration: const InputDecoration(
+                            labelText: 'Confirm password',
+                            prefixIcon: Icon(Icons.lock_outline_rounded),
+                          ),
+                          validator: (v) {
+                            if (_password.text.isEmpty && (v ?? '').isEmpty) return null;
+                            return v == _password.text ? null : 'Passwords do not match';
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
                   SoftCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -233,6 +347,19 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                       ),
                     ),
                   ),
+                  if (_isSignedInUser) ...[
+                    const SizedBox(height: 24),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.red,
+                        side: const BorderSide(color: AppColors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _logOut,
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Log out'),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),
@@ -246,7 +373,11 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
           child: FilledButton.icon(
             onPressed: _saving ? null : _save,
             icon: const Icon(Icons.check_rounded),
-            label: Text(_isNew ? 'Create account' : 'Save changes'),
+            label: Text(widget.signUp
+                ? 'Register & sign in'
+                : _isNew
+                    ? 'Create account'
+                    : 'Save changes'),
           ),
         ),
       ),
