@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../auth.dart';
 import '../data/db.dart';
 import '../data/models.dart';
+import '../quick_login.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
@@ -22,6 +23,66 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscure = true;
   bool _busy = false;
   String? _error;
+  AppUser? _quickUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuickUser();
+  }
+
+  Future<void> _loadQuickUser() async {
+    final id = await QuickLogin.enabledUserId();
+    if (id == null) return;
+    final users = await Db.instance.users();
+    final match = users.where((u) => u.id == id).toList();
+    if (match.isNotEmpty && mounted) setState(() => _quickUser = match.first);
+  }
+
+  /// Signs in with fingerprint or face for the account that has quick login.
+  Future<void> _quickSignIn() async {
+    final user = _quickUser;
+    if (user == null) return;
+    final ok = await QuickLogin.authenticate('Sign in to Household as ${user.name}');
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _error = 'Fingerprint not recognised. You can use your password.');
+      return;
+    }
+    await Session.select(user);
+  }
+
+  /// Runs after a successful password sign-in. Offers quick login once per phone.
+  Future<void> _finishSignIn(AppUser user) async {
+    if (!await QuickLogin.wasPrompted() && await QuickLogin.canUseBiometrics()) {
+      await QuickLogin.markPrompted();
+      if (!mounted) return;
+      final wantsIt = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => FancyAlert(
+          icon: Icons.fingerprint_rounded,
+          title: const Text('Enable quick login?'),
+          content: const Text(
+            'Sign in next time with your fingerprint or face instead of typing your password.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Enable'),
+            ),
+          ],
+        ),
+      );
+      if (wantsIt == true && await QuickLogin.authenticate('Confirm to enable quick login')) {
+        await QuickLogin.enable(user.id);
+      }
+    }
+    await Session.select(user);
+  }
 
   @override
   void dispose() {
@@ -69,8 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Session change swaps this page for the app automatically.
-    await Session.select(c.user);
+    await _finishSignIn(c.user);
   }
 
   Future<void> _setPasswordForExistingAccount(AppUser user) async {
@@ -133,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (ok == true) {
       final saved = await Db.instance.saveUser(user, password: pwd.text);
-      await Session.select(saved);
+      await _finishSignIn(saved);
     }
     pwd.dispose();
     confirm.dispose();
@@ -242,6 +302,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (_quickUser != null) ...[
+                                _QuickButton(name: _quickUser!.name, onTap: _quickSignIn),
+                                const SizedBox(height: 18),
+                                Row(
+                                  children: [
+                                    Expanded(child: Divider(color: Colors.white.withAlpha(90))),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      child: Text('or use password',
+                                          style: TextStyle(
+                                              color: Colors.white.withAlpha(200), fontSize: 13)),
+                                    ),
+                                    Expanded(child: Divider(color: Colors.white.withAlpha(90))),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+                              ],
                               TextField(
                                 controller: _username,
                                 autocorrect: false,
@@ -394,6 +471,52 @@ class _SignInButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Big round fingerprint button for quick login.
+class _QuickButton extends StatelessWidget {
+  final String name;
+  final VoidCallback onTap;
+
+  const _QuickButton({required this.name, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.pink, AppColors.primary],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.pink.withAlpha(90),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 42),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Sign in as $name',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+      ],
     );
   }
 }

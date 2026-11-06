@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../currencies.dart';
+import '../quick_login.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -37,6 +38,9 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   bool _saving = false;
   bool _obscure = true;
   String? _error;
+  bool _usernameTaken = false;
+  bool _quickOn = false;
+  final _scroll = ScrollController();
 
   bool get _isNew => widget.user == null;
 
@@ -56,10 +60,17 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     _address = TextEditingController(text: u?.address ?? '');
     _currency = u?.currency ?? 'SAR';
     _dob = u?.dateOfBirth ?? '';
+    if (_isSignedInUser) _loadQuick();
+  }
+
+  Future<void> _loadQuick() async {
+    final id = await QuickLogin.enabledUserId();
+    if (mounted) setState(() => _quickOn = id == widget.user?.id);
   }
 
   @override
   void dispose() {
+    _scroll.dispose();
     _username.dispose();
     _password.dispose();
     _confirm.dispose();
@@ -84,39 +95,83 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     }
   }
 
+  void _showError(String message) {
+    setState(() => _error = message);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+  }
+
   Future<void> _save() async {
-    setState(() => _error = null);
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _error = null;
+      _usernameTaken = false;
+    });
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      _showError('Please fix the highlighted fields.');
+      return;
+    }
 
     final username = _username.text.trim();
     final existing = await Db.instance.findByUsername(username);
     if (existing != null && existing.id != (widget.user?.id ?? -1)) {
-      setState(() => _error = 'That username is already taken. Choose another.');
+      setState(() => _usernameTaken = true);
+      _formKey.currentState?.validate();
+      _showError('That username is already taken. Choose another.');
       return;
     }
 
     setState(() => _saving = true);
-    final password = _password.text;
-    final saved = await Db.instance.saveUser(
-      AppUser(
-        id: widget.user?.id ?? 0,
-        username: username,
-        name: _name.text.trim(),
-        currency: _currency,
-        phone: _phone.text.trim(),
-        email: _email.text.trim(),
-        address: _address.text.trim(),
-        dateOfBirth: _dob,
-        role: widget.user?.role ?? 'member',
-      ),
-      password: password.isEmpty ? null : password,
-    );
+    try {
+      final password = _password.text;
+      final saved = await Db.instance.saveUser(
+        AppUser(
+          id: widget.user?.id ?? 0,
+          username: username,
+          name: _name.text.trim(),
+          currency: _currency,
+          phone: _phone.text.trim(),
+          email: _email.text.trim(),
+          address: _address.text.trim(),
+          dateOfBirth: _dob,
+          role: widget.user?.role ?? 'member',
+        ),
+        password: password.isEmpty ? null : password,
+      );
 
-    // Sign in after registering, and keep the signed-in details up to date.
-    if (widget.signUp || _isSignedInUser) {
-      await Session.select(saved);
+      // Sign in after registering, and keep the signed-in details up to date.
+      if (widget.signUp || _isSignedInUser) {
+        await Session.select(saved);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError('Could not save the account. $e');
+      }
     }
-    if (mounted) Navigator.pop(context, true);
+  }
+
+  Future<void> _toggleQuick(bool on) async {
+    final user = widget.user;
+    if (user == null) return;
+    if (on) {
+      if (!await QuickLogin.canUseBiometrics()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Set up a fingerprint or face unlock in your phone settings first.')));
+        }
+        return;
+      }
+      final ok = await QuickLogin.authenticate('Confirm to turn on quick login');
+      if (!ok) return;
+      await QuickLogin.enable(user.id);
+    } else {
+      await QuickLogin.disable();
+    }
+    if (mounted) setState(() => _quickOn = on);
   }
 
   Future<void> _logOut() async {
@@ -145,6 +200,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          controller: _scroll,
           padding: EdgeInsets.zero,
           children: [
             GradientHeader(
@@ -197,6 +253,9 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                         TextFormField(
                           controller: _username,
                           autocorrect: false,
+                          onChanged: (_) {
+                            if (_usernameTaken) setState(() => _usernameTaken = false);
+                          },
                           decoration: const InputDecoration(
                             labelText: 'Username *',
                             helperText: '3–20 letters, numbers, _ or .',
@@ -204,6 +263,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                           ),
                           validator: (v) {
                             final t = v?.trim() ?? '';
+                            if (_usernameTaken) return 'This username is already taken';
                             if (t.isEmpty) return 'Please enter a username';
                             return RegExp(r'^[a-zA-Z0-9_.]{3,20}$').hasMatch(t)
                                 ? null
@@ -350,6 +410,20 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                   ),
                   if (_isSignedInUser) ...[
                     const SizedBox(height: 24),
+                    SoftCard(
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.fingerprint_rounded,
+                            color: AppColors.primary, size: 30),
+                        title: const Text('Quick login',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: const Text(
+                            'Sign in with your fingerprint or face on this phone'),
+                        value: _quickOn,
+                        onChanged: _toggleQuick,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.red,

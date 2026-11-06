@@ -23,6 +23,31 @@ jobs:
         # Generates the android/ folder. Existing files such as lib/ and pubspec.yaml are kept.
         run: flutter create --platforms=android --project-name household_app --org com.household .
 
+      - name: Enable fingerprint sign-in in Android project
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          # Permission for the fingerprint prompt.
+          manifest = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          m = manifest.read_text()
+          if 'USE_BIOMETRIC' not in m:
+              m = re.sub(r'(<manifest[^>]*>)', r'\1\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" />', m, count=1)
+              manifest.write_text(m)
+          # The fingerprint prompt needs a FragmentActivity instead of a plain FlutterActivity.
+          for f in pathlib.Path('android/app/src/main').rglob('MainActivity.*'):
+              t = f.read_text()
+              t = t.replace('io.flutter.embedding.android.FlutterActivity', 'io.flutter.embedding.android.FlutterFragmentActivity')
+              t = t.replace(': FlutterActivity()', ': FlutterFragmentActivity()')
+              t = t.replace('extends FlutterActivity', 'extends FlutterFragmentActivity')
+              f.write_text(t)
+          # local_auth needs Android 6.0 (API 23) or newer.
+          for f in pathlib.Path('android/app').glob('build.gradle*'):
+              t = f.read_text()
+              t = re.sub(r'minSdk\s*=?\s*flutter\.minSdkVersion', 'minSdk = 23', t)
+              t = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', t)
+              f.write_text(t)
+          PY
+
       - name: Get packages
         run: flutter pub get
 
