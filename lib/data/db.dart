@@ -136,6 +136,21 @@ class Db {
     );
   }
 
+  /// Deletes an account and the data that belongs only to it. Shared bills it
+  /// paid stay in Split so other members' balances are not changed.
+  Future<void> deleteUser(int id) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('users', where: 'id = ?', whereArgs: [id]);
+      await txn.delete('categories', where: 'userId = ?', whereArgs: [id]);
+      await txn.delete('expenses', where: 'userId = ?', whereArgs: [id]);
+      await txn.delete('recurring', where: 'userId = ?', whereArgs: [id]);
+      await txn.delete('exchange_rates', where: 'userId = ?', whereArgs: [id]);
+      await txn.delete('group_members', where: 'userId = ?', whereArgs: [id]);
+    });
+    DataChanges.bump();
+  }
+
   /// Makes sure the default admin account exists (username musa, admin role).
   /// An existing account named Musa is promoted instead of duplicated.
   Future<void> ensureDefaultAdmin() async {

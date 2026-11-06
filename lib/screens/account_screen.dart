@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../quick_login.dart';
 import '../widgets/data_refresh.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -56,6 +57,39 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
       MaterialPageRoute(builder: (_) => AccountFormScreen(user: user)),
     );
     if (saved == true) _refresh();
+  }
+
+  /// Admins can delete other accounts after confirming.
+  Future<void> _deleteAccount(AppUser u) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        icon: Icons.delete_forever_rounded,
+        color: AppColors.red,
+        title: Text('Delete ${u.name}?'),
+        content: const Text(
+          'This removes the account with its expenses, budget categories and recurring bills. '
+          'Shared bills it paid stay in Split. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (await QuickLogin.enabledUserId() == u.id) {
+      await QuickLogin.disable();
+    }
+    await Db.instance.deleteUser(u.id);
+    _refresh();
   }
 
   Future<void> _createGroup(List<AppUser> users) async {
@@ -186,6 +220,9 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               primary: i == 0,
                               isCurrent: current?.id == d.users[i].id,
                               onEdit: () => _openForm(d.users[i]),
+                              canEdit: (current?.isAdmin ?? false) || current?.id == d.users[i].id,
+                              canDelete: (current?.isAdmin ?? false) && current?.id != d.users[i].id,
+                              onDelete: () => _deleteAccount(d.users[i]),
                             ),
                           ),
                       ] else ...[
@@ -332,19 +369,31 @@ class _AccountCard extends StatelessWidget {
   final AppUser user;
   final bool primary;
   final bool isCurrent;
+  final bool canEdit;
+  final bool canDelete;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _AccountCard({
     required this.user,
     required this.primary,
     required this.isCurrent,
+    required this.canEdit,
+    required this.canDelete,
     required this.onEdit,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = [
+      if (isCurrent) 'You',
+      if (primary) 'Primary',
+      if (user.isAdmin) 'Admin',
+      user.currency,
+    ].join(' • ');
+
     return SoftCard(
-      onTap: onEdit,
       child: Row(
         children: [
           const CircleAvatar(
@@ -359,17 +408,22 @@ class _AccountCard extends StatelessWidget {
               children: [
                 Text(user.name,
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                Text([if (primary) 'Primary', if (user.isAdmin) 'Admin', user.currency].join(' • '),
+                Text(subtitle,
                     style: const TextStyle(color: AppColors.muted, fontSize: 12)),
               ],
             ),
           ),
-          if (isCurrent)
-            const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 28)
-          else
-            OutlinedButton(
-              onPressed: () => Session.select(user),
-              child: const Text('Use'),
+          if (canEdit)
+            IconButton(
+              tooltip: 'Edit',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_rounded, color: AppColors.primary),
+            ),
+          if (canDelete)
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.red),
             ),
         ],
       ),
