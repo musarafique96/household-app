@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth.dart';
 import '../cloud_auth.dart';
+import '../diagnostics.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../quick_login.dart';
@@ -255,7 +256,10 @@ class _LoginScreenState extends State<LoginScreen> {
     } on CloudAuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Google sign-in did not work. $e');
+      final key = await Diagnostics.appSigningKey();
+      if (mounted) {
+        setState(() => _error = 'Google sign-in did not work. $e\n\nThis app\'s signing key: $key');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

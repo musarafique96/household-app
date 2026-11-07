@@ -30,6 +30,46 @@ jobs:
           mkdir -p ~/.android
           cp android-signing/debug.keystore ~/.android/debug.keystore
 
+      - name: Add diagnostic channel (reads the app's signing key)
+        run: |
+          DIR=android/app/src/main/kotlin/com/gharbaar/household_app
+          mkdir -p "$DIR"
+          cat > "$DIR/MainActivity.kt" <<'KT'
+          package com.gharbaar.household_app
+
+          import android.content.pm.PackageManager
+          import android.os.Build
+          import io.flutter.embedding.android.FlutterFragmentActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          import java.security.MessageDigest
+
+          class MainActivity : FlutterFragmentActivity() {
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "gharbaar/diag")
+                      .setMethodCallHandler { call, result ->
+                          if (call.method == "signingSha1") result.success(signingSha1())
+                          else result.notImplemented()
+                      }
+              }
+
+              private fun signingSha1(): String {
+                  if (Build.VERSION.SDK_INT < 28) return "needs Android 9 or newer"
+                  return try {
+                      val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                      val signers = info.signingInfo?.apkContentsSigners ?: return "none"
+                      signers.joinToString(", ") { sig ->
+                          MessageDigest.getInstance("SHA-1").digest(sig.toByteArray())
+                              .joinToString(":") { "%02X".format(it) }
+                      }
+                  } catch (e: Exception) {
+                      "error: " + e.toString()
+                  }
+              }
+          }
+          KT
+
       - name: Enable fingerprint sign-in in Android project
         run: |
           python3 - <<'PY'
