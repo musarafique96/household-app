@@ -92,6 +92,22 @@ jobs:
           m = manifest.read_text()
           m = re.sub(r'(<application[^>]*android:label=")[^"]*(")', r'\1Gharbaar\2', m, count=1)
           manifest.write_text(m)
+          # Sign the debug build with the key in this repo, so the fingerprint never changes.
+          for f in pathlib.Path('android/app').glob('build.gradle*'):
+              t = f.read_text()
+              if 'android-signing' not in t and 'android {\n' in t:
+                  if f.suffix == '.kts':
+                      cfg = ('    signingConfigs {\n        getByName("debug") {\n'
+                             '            storeFile = rootProject.projectDir.parentFile.resolve("android-signing/debug.keystore")\n'
+                             '            storePassword = "android"\n            keyAlias = "androiddebugkey"\n            keyPassword = "android"\n'
+                             '        }\n    }\n')
+                  else:
+                      cfg = ('    signingConfigs {\n        debug {\n'
+                             '            storeFile file("${rootProject.projectDir.parentFile}/android-signing/debug.keystore")\n'
+                             "            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n"
+                             '        }\n    }\n')
+                  t = t.replace('android {\n', 'android {\n' + cfg, 1)
+                  f.write_text(t)
           # local_auth needs Android 6.0 (API 23) or newer.
           for f in pathlib.Path('android/app').glob('build.gradle*'):
               t = f.read_text()
