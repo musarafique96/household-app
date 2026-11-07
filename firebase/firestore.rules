@@ -15,6 +15,10 @@ service cloud.firestore {
       return request.auth.token.email;
     }
 
+    function me_uid() {
+      return request.auth.uid;
+    }
+
     function inFamily(fid) {
       return signedIn()
         && exists(/databases/$(database)/documents/families/$(fid)/members/$(me()));
@@ -51,6 +55,14 @@ service cloud.firestore {
     // Shared family data: expenses, budgets, splits, inventory, cooking, and so on.
     match /familyData/{fid}/{document=**} {
       allow read, write: if inFamily(fid);
+    }
+
+    // Phone numbers: each number can belong to one account. Only that account can free it.
+    match /phones/{phone} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me_uid();
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == me_uid();
     }
 
     // Personal data for people who are not in a family.
