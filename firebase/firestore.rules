@@ -1,9 +1,9 @@
 rules_version = '2';
 
 // Gharbaar security rules.
-// - Anyone signed in with Google can send a join request. That gives no access to data.
-// - Only approved members (a record in "members") can read or write family data under "data".
-// - Only admins can approve members or change the members list.
+// - Anyone signed in with Google can create a family.
+// - Family members read and write the family's data under "familyData".
+// - Each person's own data (no family) lives under "personal" and only they can read it.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -15,32 +15,47 @@ service cloud.firestore {
       return request.auth.token.email;
     }
 
-    function isMember() {
-      return signedIn() && exists(/databases/$(database)/documents/members/$(me()));
+    function inFamily(fid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/families/$(fid)/members/$(me()));
     }
 
-    function isAdmin() {
-      return isMember()
-        && get(/databases/$(database)/documents/members/$(me())).data.role == 'admin';
+    function isFamilyAdmin(fid) {
+      return inFamily(fid)
+        && get(/databases/$(database)/documents/families/$(fid)/members/$(me())).data.role == 'admin';
     }
 
-    // Join requests: a person can create and read only their own request.
-    // Admins can read all requests and delete them after approving.
-    match /join_requests/{email} {
-      allow create: if signedIn() && me() == email;
-      allow read: if signedIn() && (me() == email || isAdmin());
-      allow delete: if isAdmin();
+    // A family. The creator is recorded so they can add themselves as the first admin.
+    match /families/{fid} {
+      allow create: if signedIn() && request.resource.data.createdBy == me();
+      allow read: if inFamily(fid);
+      allow update, delete: if isFamilyAdmin(fid);
+
+      // Members of a family. Admins add or remove people. The creator adds themselves as admin once.
+      match /members/{email} {
+        allow read: if inFamily(fid) || me() == email;
+        allow create: if isFamilyAdmin(fid)
+          || (me() == email
+              && email == me()
+              && request.resource.data.role == 'admin'
+              && get(/databases/$(database)/documents/families/$(fid)).data.createdBy == me());
+        allow update, delete: if isFamilyAdmin(fid);
+      }
     }
 
-    // Members: a person can read their own record. Only admins can add or change members.
-    match /members/{email} {
-      allow read: if signedIn() && (me() == email || isAdmin());
-      allow write: if isAdmin();
+    // Lets a person find the families they belong to, by their own email only.
+    match /{path=**}/members/{email} {
+      allow read: if signedIn() && me() == email;
     }
 
-    // Family data (expenses, budgets, splits, inventory, cooking, and so on).
-    match /data/{document=**} {
-      allow read, write: if isMember();
+    // Shared family data: expenses, budgets, splits, inventory, cooking, and so on.
+    match /familyData/{fid}/{document=**} {
+      allow read, write: if inFamily(fid);
+    }
+
+    // Personal data for people who are not in a family.
+    match /personal/{email}/{document=**} {
+      allow read, write: if signedIn() && me() == email;
     }
   }
 }
