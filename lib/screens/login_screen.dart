@@ -77,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _pinLogin() {
     final user = _quickUser!;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final text = dark ? const Color(0xFFF4F1FB) : text;
+    final text = dark ? const Color(0xFFF4F1FB) : AppColors.ink;
     final muted = dark ? const Color(0xFFB7B0CC) : AppColors.muted;
     return Scaffold(
       body: SafeArea(
@@ -91,41 +91,41 @@ class _LoginScreenState extends State<LoginScreen> {
                 icon: Icon(Icons.logout_rounded, size: 28, color: text),
               ),
             ),
-            const Spacer(),
+            Spacer(),
             PinDots(filled: _pin.length),
-            const SizedBox(height: 36),
+            SizedBox(height: 36),
             Text('Hi ${user.name.toUpperCase()}',
-                style: const TextStyle(
+                style: TextStyle(
                     color: text, fontSize: 26, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text('Enter your passkey',
                 style: TextStyle(color: muted, fontSize: 16)),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             SizedBox(
               height: 44,
               child: Center(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: EdgeInsets.symmetric(horizontal: 32),
                   child: Text(_error ?? '',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
+                      style: TextStyle(color: AppColors.red, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),
             TextButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text('Ask the admin to set a new password for you.'))),
               child: Text('Forgot password?',
                   style: TextStyle(color: text, fontSize: 16, fontWeight: FontWeight.w700)),
             ),
-            const Spacer(),
+            Spacer(),
             PinKeypad(
               onDigit: _pinDigit,
               onBackspace: _pinBackspace,
               textColor: text,
               bottomLeft: _FingerprintKey(onTap: _quickSignIn),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
           ],
         ),
       ),
