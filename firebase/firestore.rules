@@ -1,19 +1,46 @@
 rules_version = '2';
 
-// Only signed-in Google accounts listed here can read or write any data.
-// Add each family member's Gmail address to the list below.
+// Gharbaar security rules.
+// - Anyone signed in with Google can send a join request. That gives no access to data.
+// - Only approved members (a record in "members") can read or write family data under "data".
+// - Only admins can approve members or change the members list.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isFamily() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in [
-          'FAMILY_MEMBER_1@gmail.com'
-        ];
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
     }
 
-    match /{document=**} {
-      allow read, write: if isFamily();
+    function me() {
+      return request.auth.token.email;
+    }
+
+    function isMember() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(me()));
+    }
+
+    function isAdmin() {
+      return isMember()
+        && get(/databases/$(database)/documents/members/$(me())).data.role == 'admin';
+    }
+
+    // Join requests: a person can create and read only their own request.
+    // Admins can read all requests and delete them after approving.
+    match /join_requests/{email} {
+      allow create: if signedIn() && me() == email;
+      allow read: if signedIn() && (me() == email || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Members: a person can read their own record. Only admins can add or change members.
+    match /members/{email} {
+      allow read: if signedIn() && (me() == email || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Family data (expenses, budgets, splits, inventory, cooking, and so on).
+    match /data/{document=**} {
+      allow read, write: if isMember();
     }
   }
 }
