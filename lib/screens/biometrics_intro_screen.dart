@@ -18,8 +18,9 @@ class BiometricsIntroScreen extends StatelessWidget {
       await QuickLogin.enable(user.id);
       if (context.mounted) Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Fingerprint not recognised. You can turn it on later in your profile.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Fingerprint did not work: ${QuickLogin.lastError ?? 'try again'}. You can turn it on later in your profile.')));
     }
   }
 

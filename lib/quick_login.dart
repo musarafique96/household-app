@@ -21,10 +21,10 @@ class QuickLogin {
     }
   }
 
-  /// Shows the system fingerprint prompt. Returns true if it was recognised.
   /// Why the last fingerprint check failed, for showing to the user.
   static String? lastError;
 
+  /// Shows the system fingerprint prompt. Returns true if it was recognised.
   static Future<bool> authenticate(String reason) async {
     try {
       lastError = null;
