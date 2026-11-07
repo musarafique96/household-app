@@ -139,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await QuickLogin.authenticate('Sign in to Household as ${user.name}');
     if (!mounted) return;
     if (!ok) {
-      setState(() => _error = 'Fingerprint not recognised. Use your passkey or password.');
+      setState(() => _error = 'Fingerprint did not work: ${QuickLogin.lastError ?? 'try again'}. Use your passkey or password.');
       return;
     }
     await Session.select(user);

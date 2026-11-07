@@ -22,16 +22,23 @@ class QuickLogin {
   }
 
   /// Shows the system fingerprint prompt. Returns true if it was recognised.
+  /// Why the last fingerprint check failed, for showing to the user.
+  static String? lastError;
+
   static Future<bool> authenticate(String reason) async {
     try {
-      return await _auth.authenticate(
+      lastError = null;
+      final ok = await _auth.authenticate(
         localizedReason: reason,
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
         ),
       );
-    } catch (_) {
+      if (!ok) lastError = 'cancelled or not recognised';
+      return ok;
+    } catch (e) {
+      lastError = e.toString();
       return false;
     }
   }
