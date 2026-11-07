@@ -1,21 +1,18 @@
 rules_version = '2';
 
-// Gharbaar security rules.
-// - Anyone signed in with Google can create a family.
-// - Family members read and write the family's data under "familyData".
-// - Each person's own data (no family) lives under "personal" and only they can read it.
+// Gharbaar security rules. People are identified by their account ID (uid), which cannot be faked.
+// - Any signed-in account can create a family and becomes its first admin.
+// - Family members read and write shared family data under "familyData".
+// - Each account's own data (no family) lives under "personal" and only that account can read it.
+// - Phone numbers are reserved so that each number belongs to one account.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null;
     }
 
     function me() {
-      return request.auth.token.email;
-    }
-
-    function me_uid() {
       return request.auth.uid;
     }
 
@@ -35,21 +32,21 @@ service cloud.firestore {
       allow read: if inFamily(fid);
       allow update, delete: if isFamilyAdmin(fid);
 
-      // Members of a family. Admins add or remove people. The creator adds themselves as admin once.
-      match /members/{email} {
-        allow read: if inFamily(fid) || me() == email;
+      // Members, keyed by account ID. Admins add or remove people.
+      // The creator adds themselves as admin once, right after creating the family.
+      match /members/{uid} {
+        allow read: if inFamily(fid) || me() == uid;
         allow create: if isFamilyAdmin(fid)
-          || (me() == email
-              && email == me()
+          || (me() == uid
               && request.resource.data.role == 'admin'
               && get(/databases/$(database)/documents/families/$(fid)).data.createdBy == me());
         allow update, delete: if isFamilyAdmin(fid);
       }
     }
 
-    // Lets a person find the families they belong to, by their own email only.
-    match /{path=**}/members/{email} {
-      allow read: if signedIn() && me() == email;
+    // Lets an account find the families it belongs to, by its own ID only.
+    match /{path=**}/members/{uid} {
+      allow read: if signedIn() && me() == uid;
     }
 
     // Shared family data: expenses, budgets, splits, inventory, cooking, and so on.
@@ -57,17 +54,17 @@ service cloud.firestore {
       allow read, write: if inFamily(fid);
     }
 
-    // Phone numbers: each number can belong to one account. Only that account can free it.
+    // Phone numbers: each number belongs to one account. Only that account can free it.
     match /phones/{phone} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == me_uid();
+      allow create: if signedIn() && request.resource.data.uid == me();
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == me_uid();
+      allow delete: if signedIn() && resource.data.uid == me();
     }
 
-    // Personal data for people who are not in a family.
-    match /personal/{email}/{document=**} {
-      allow read, write: if signedIn() && me() == email;
+    // Personal data for accounts that are not in a family.
+    match /personal/{uid}/{document=**} {
+      allow read, write: if signedIn() && me() == uid;
     }
   }
 }
