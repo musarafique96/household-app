@@ -23,6 +23,13 @@ jobs:
         # Generates the android/ folder. Existing files such as lib/ and pubspec.yaml are kept.
         run: flutter create --platforms=android --project-name household_app --org com.gharbaar .
 
+      - name: Add Firebase config and fixed signing key
+        # Same signing key on every build, so the APK keeps the same fingerprint for Google sign-in.
+        run: |
+          cp firebase/google-services.json android/app/google-services.json
+          mkdir -p ~/.android
+          cp android-signing/debug.keystore ~/.android/debug.keystore
+
       - name: Enable fingerprint sign-in in Android project
         run: |
           python3 - <<'PY'
@@ -51,6 +58,21 @@ jobs:
               t = re.sub(r'minSdk\s*=?\s*flutter\.minSdkVersion', 'minSdk = 23', t)
               t = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', t)
               f.write_text(t)
+          # Firebase: the Google services plugin reads google-services.json.
+          for f in pathlib.Path('android').glob('settings.gradle*'):
+              t = f.read_text()
+              if 'google-services' not in t:
+                  line = ('    id("com.google.gms.google-services") version "4.4.2" apply false' if f.suffix == '.kts'
+                          else "    id 'com.google.gms.google-services' version '4.4.2' apply false")
+                  t = t.replace('plugins {', 'plugins {\n' + line, 1)
+                  f.write_text(t)
+          for f in pathlib.Path('android/app').glob('build.gradle*'):
+              t = f.read_text()
+              if 'google-services' not in t:
+                  line = ('    id("com.google.gms.google-services")' if f.suffix == '.kts'
+                          else "    id 'com.google.gms.google-services'")
+                  t = t.replace('plugins {', 'plugins {\n' + line, 1)
+                  f.write_text(t)
           PY
 
       - name: Get packages

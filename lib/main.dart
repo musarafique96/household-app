@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
@@ -14,6 +15,12 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    // The app still works offline on the phone if Firebase cannot start.
+    debugPrint('Firebase did not start: $e');
+  }
   await AppSettings.load();
   await Db.instance.ensureDefaultAdmin();
   Session.restore();
