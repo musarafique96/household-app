@@ -283,21 +283,6 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               onTap: () => setState(() => _showGroups = true),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: QuickTile(
-                              icon: Icons.currency_exchange_rounded,
-                              label: 'Change Currency',
-                              color: AppColors.amber,
-                              onTap: () {
-                                if (current != null) {
-                                  _openForm(current);
-                                } else {
-                                  _snack('Choose an account first.');
-                                }
-                              },
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 40),

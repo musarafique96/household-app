@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../cloud_auth.dart';
 
 import '../currencies.dart';
+import '../dial_codes.dart';
 import '../quick_login.dart';
 import 'passkey_screen.dart';
 import '../data/db.dart';
@@ -35,6 +36,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   late final TextEditingController _confirm;
   late final TextEditingController _name;
   late final TextEditingController _phone;
+  String _dial = kDefaultDial;
   late final TextEditingController _email;
   late final TextEditingController _address;
   late String _currency;
@@ -50,6 +52,8 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
 
   bool get _isNew => widget.user == null;
 
+  String get _fullPhone => fullPhone(_dial, _phone.text);
+
   bool get _isSignedInUser =>
       !_isNew && Session.current.value?.id == widget.user!.id;
 
@@ -61,7 +65,9 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     _password = TextEditingController();
     _confirm = TextEditingController();
     _name = TextEditingController(text: u?.name ?? '');
-    _phone = TextEditingController(text: u?.phone ?? '');
+    final split = splitPhone(u?.phone ?? '');
+    _dial = split.code;
+    _phone = TextEditingController(text: split.number);
     _email = TextEditingController(text: u?.email ?? '');
     _address = TextEditingController(text: u?.address ?? '');
     _currency = u?.currency ?? 'SAR';
@@ -133,7 +139,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     setState(() => _saving = true);
     try {
       final password = _password.text;
-      final phone = _phone.text.trim();
+      final phone = _fullPhone;
       String cloudUid = '';
 
       // New username accounts also get a cloud account, so they can sync.
@@ -167,7 +173,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
           username: username,
           name: _name.text.trim(),
           currency: _currency,
-          phone: _phone.text.trim(),
+          phone: _fullPhone,
           email: _email.text.trim(),
           address: _address.text.trim(),
           dateOfBirth: _dob,
@@ -414,13 +420,34 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        TextFormField(
-                          controller: _phone,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Phone',
-                            prefixIcon: Icon(Icons.phone_rounded),
-                          ),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 140,
+                              child: DropdownButtonFormField<String>(
+                                value: _dial,
+                                isExpanded: true,
+                                decoration: const InputDecoration(labelText: 'Code'),
+                                items: [
+                                  for (final c in kDialCodes)
+                                    DropdownMenuItem(
+                                      value: c.code,
+                                      child: Text('${c.code} ${c.country}',
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                ],
+                                onChanged: (v) => setState(() => _dial = v ?? _dial),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _phone,
+                                keyboardType: TextInputType.phone,
+                                decoration: const InputDecoration(labelText: 'Phone number'),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 14),
                         TextFormField(

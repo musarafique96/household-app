@@ -137,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _quickSignIn() async {
     final user = _quickUser;
     if (user == null) return;
-    final ok = await QuickLogin.authenticate('Sign in to Household as ${user.name}');
+    final ok = await QuickLogin.authenticate('Sign in to Gharbaar as ${user.name}');
     if (!mounted) return;
     if (!ok) {
       setState(() => _error = 'Fingerprint did not work: ${QuickLogin.lastError ?? 'try again'}. Use your passkey or password.');
@@ -400,7 +400,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 18),
                         const Text(
-                          'Household',
+                          'Gharbaar',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,
