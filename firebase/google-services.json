@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "360184901967-553ftvlq309mud00pcl2llhdqr2p7v4h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gharbaar.household_app",
+            "certificate_hash": "feeb718e8dab69f9f7d389d5204ca3db5ffa2953"
+          }
+        },
+        {
           "client_id": "360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com",
           "client_type": 3
         }
