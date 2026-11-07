@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "360184901967",
+    "project_id": "gharbaar-204f",
+    "storage_bucket": "gharbaar-204f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360184901967:android:8100eb1a6bfbe44428d53a",
+        "android_client_info": {
+          "package_name": "com.gharbaar.household_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVW_pXTm74TPE-WBpj5gv2qYArAtbq4yA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
