@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../widgets/fancy.dart';
+import 'passkey_screen.dart';
 
 import '../widgets/data_refresh.dart';
 import '../budget_math.dart';
@@ -56,6 +60,44 @@ class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScree
   void initState() {
     super.initState();
     _future = _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askPasskey());
+  }
+
+  /// Once per account: offer a passkey on the first home visit.
+  Future<void> _askPasskey() async {
+    final user = Session.current.value;
+    if (user == null || user.hasPasskey || !mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'passkey_asked_${user.id}';
+    if (prefs.getBool(key) == true) return;
+    await prefs.setBool(key, true);
+    if (!mounted) return;
+
+    final setUp = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        icon: Icons.pin_rounded,
+        title: const Text('Add a passkey?'),
+        content: const Text(
+            'A 6-digit passkey lets you sign in quickly on this phone. '
+            'You can set it up now or later from your profile.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Later'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Set up now'),
+          ),
+        ],
+      ),
+    );
+    if (setUp == true && mounted) {
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => PasskeyScreen(user: user, setup: true)),
+      );
+    }
   }
 
   Future<_HomeData?> _load() async {
@@ -199,8 +241,10 @@ class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScree
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
+                            IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
                                 Expanded(
                                   child: QuickTile(
                                     icon: Icons.add_rounded,
@@ -236,7 +280,8 @@ class _HomeScreenState extends State<HomeScreen> with DataRefreshState<HomeScree
                                     onTap: () => widget.onOpenTab(4),
                                   ),
                                 ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 20),
                             SectionTitle(title: 'This Month (${monthLabel(_month)})'),

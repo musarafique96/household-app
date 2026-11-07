@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../auth.dart';
 import '../cloud_auth.dart';
+import '../widgets/fancy.dart';
 
 import '../currencies.dart';
 import '../dial_codes.dart';
@@ -200,6 +202,69 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   }
 
   /// Turning passkey on asks to set one only the first time; after that it is reused.
+  Future<String?> _askPassword() async {
+    final c = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        icon: Icons.cloud_sync_rounded,
+        title: const Text('Confirm your password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your current password to connect this account to the cloud.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: c,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+    final text = c.text;
+    c.dispose();
+    return ok == true ? text : null;
+  }
+
+  Future<void> _connectCloud() async {
+    final user = widget.user;
+    if (user == null) return;
+    final pwd = await _askPassword();
+    if (pwd == null || pwd.isEmpty) return;
+    final creds = await Db.instance.credentialsFor(user.username);
+    if (creds == null || !Auth.verify(creds.salt, creds.passwordHash, pwd)) {
+      _showError('That password is not right.');
+      return;
+    }
+    try {
+      User cloud;
+      try {
+        cloud = await CloudAuth.signUp(user.username, pwd);
+      } on CloudAuthException catch (e) {
+        if (!e.message.contains('taken')) rethrow;
+        cloud = await CloudAuth.signIn(user.username, pwd);
+      }
+      await Db.instance.setFirebaseUid(user.id, cloud.uid);
+      if (mounted) setState(() {});
+    } on CloudAuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Could not connect. $e');
+    }
+  }
+
   Future<void> _linkGmail() async {
     try {
       await CloudAuth.linkGmail();
@@ -509,20 +574,24 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                   ),
                   if (_isSignedInUser) ...[
                     const SizedBox(height: 24),
-                    if (CloudAuth.currentUser != null && CloudAuth.linkedGmail() == null) ...[
+                    if (CloudAuth.linkedGmail() == null) ...[
                       SoftCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Add your Gmail',
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            Text(
+                                CloudAuth.currentUser == null
+                                    ? 'Connect to the cloud'
+                                    : 'Add your Gmail',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                             const SizedBox(height: 6),
-                            const Text(
-                                'Sign in with Google, and reset your password if you forget it.'),
+                            Text(CloudAuth.currentUser == null
+                                ? 'Sync your data across phones and family members.'
+                                : 'Sign in with Google, and reset your password if you forget it.'),
                             const SizedBox(height: 12),
                             OutlinedButton(
-                              onPressed: _linkGmail,
-                              child: const Text('Link Gmail'),
+                              onPressed: CloudAuth.currentUser == null ? _connectCloud : _linkGmail,
+                              child: Text(CloudAuth.currentUser == null ? 'Connect' : 'Link Gmail'),
                             ),
                           ],
                         ),
