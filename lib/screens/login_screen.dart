@@ -257,6 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       final key = await Diagnostics.appSigningKey();
+      await Diagnostics.saveNote('Google sign-in failed: $e | app signing key: $key');
       if (mounted) {
         setState(() => _error = 'Google sign-in did not work. $e\n\nThis app\'s signing key: $key');
       }

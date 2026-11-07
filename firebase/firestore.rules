@@ -62,6 +62,15 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
+    // Sign-in diagnostics: the app can add a short note. Nobody can read notes from the app.
+    // Read them in the Firebase console.
+    match /diagnostics/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['text', 'at'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() < 2000;
+      allow read, update, delete: if false;
+    }
+
     // Personal data for accounts that are not in a family.
     match /personal/{uid}/{document=**} {
       allow read, write: if signedIn() && me() == uid;
