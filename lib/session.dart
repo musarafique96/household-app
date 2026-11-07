@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'cloud_auth.dart';
 import 'data/db.dart';
 import 'data/models.dart';
 
@@ -27,6 +28,9 @@ class Session {
 
   static Future<void> signOut() async {
     current.value = null;
+    try {
+      await CloudAuth.signOut();
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
   }

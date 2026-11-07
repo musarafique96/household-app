@@ -23,10 +23,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0)');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0, firebaseUid TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -43,6 +43,9 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 10) {
+          await db.execute("ALTER TABLE users ADD COLUMN firebaseUid TEXT NOT NULL DEFAULT ''");
+        }
         if (oldVersion < 9) {
           await db.execute("ALTER TABLE users ADD COLUMN passkeyHash TEXT NOT NULL DEFAULT ''");
           await db.execute("ALTER TABLE users ADD COLUMN passkeySalt TEXT NOT NULL DEFAULT ''");
@@ -144,6 +147,13 @@ class Db {
       address: user.address,
       dateOfBirth: user.dateOfBirth,
     );
+  }
+
+  /// Links this local account to a Firebase account.
+  Future<void> setFirebaseUid(int userId, String uid) async {
+    final db = await _database;
+    await db.update('users', {'firebaseUid': uid}, where: 'id = ?', whereArgs: [userId]);
+    DataChanges.bump();
   }
 
   /// Deletes an account. Its expenses, budgets and history are kept so monthly

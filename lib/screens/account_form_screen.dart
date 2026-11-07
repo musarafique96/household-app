@@ -1,4 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../cloud_auth.dart';
 
 import '../currencies.dart';
 import '../quick_login.dart';
@@ -130,6 +133,34 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     setState(() => _saving = true);
     try {
       final password = _password.text;
+      final phone = _phone.text.trim();
+      String cloudUid = '';
+
+      // New username accounts also get a cloud account, so they can sync.
+      if (widget.signUp && password.isNotEmpty) {
+        User? cloudUser;
+        try {
+          cloudUser = await CloudAuth.signUp(username, password);
+        } on CloudAuthException catch (e) {
+          if (e.message.contains('taken') || e.message.contains('Password')) rethrow;
+          // Otherwise (for example, no internet): saved on this phone, and joins the cloud later.
+        } catch (_) {}
+        if (cloudUser != null) {
+          cloudUid = cloudUser.uid;
+          if (phone.isNotEmpty) {
+            try {
+              await CloudAuth.setPhone(phone);
+            } catch (e) {
+              await cloudUser.delete();
+              rethrow;
+            }
+          }
+        }
+      } else if (_isSignedInUser && CloudAuth.currentUser != null &&
+          phone.isNotEmpty && phone != (widget.user?.phone ?? '')) {
+        await CloudAuth.setPhone(phone, oldPhone: widget.user?.phone);
+      }
+
       final saved = await Db.instance.saveUser(
         AppUser(
           id: widget.user?.id ?? 0,
@@ -145,6 +176,10 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         password: password.isEmpty ? null : password,
       );
 
+      if (cloudUid.isNotEmpty) {
+        await Db.instance.setFirebaseUid(saved.id, cloudUid);
+      }
+
       // Sign in after registering, and keep the signed-in details up to date.
       if (widget.signUp || _isSignedInUser) {
         await Session.select(saved);
@@ -159,6 +194,17 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   }
 
   /// Turning passkey on asks to set one only the first time; after that it is reused.
+  Future<void> _linkGmail() async {
+    try {
+      await CloudAuth.linkGmail();
+      if (mounted) setState(() {});
+    } on CloudAuthException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Could not link Gmail. $e');
+    }
+  }
+
   Future<void> _togglePasskey(bool on) async {
     final user = widget.user;
     if (user == null) return;
@@ -436,6 +482,26 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                   ),
                   if (_isSignedInUser) ...[
                     const SizedBox(height: 24),
+                    if (CloudAuth.currentUser != null && CloudAuth.linkedGmail() == null) ...[
+                      SoftCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Add your Gmail',
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            const SizedBox(height: 6),
+                            const Text(
+                                'Sign in with Google, and reset your password if you forget it.'),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _linkGmail,
+                              child: const Text('Link Gmail'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     SoftCard(
                       child: SwitchListTile(
                         contentPadding: EdgeInsets.zero,

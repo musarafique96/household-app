@@ -19,6 +19,8 @@ class AppUser {
   final String address;
   /// yyyy-MM-dd, or '' if not given.
   final String dateOfBirth;
+  /// Firebase account ID for cloud sign-in and sync. Empty if not connected yet.
+  final String firebaseUid;
 
   bool get isAdmin => role == 'admin';
 
@@ -35,6 +37,7 @@ class AppUser {
     this.email = '',
     this.address = '',
     this.dateOfBirth = '',
+    this.firebaseUid = '',
   });
 
   factory AppUser.fromMap(Map<String, Object?> m) => AppUser(
@@ -42,6 +45,7 @@ class AppUser {
         name: m['name'] as String,
         currency: m['currency'] as String,
         username: (m['username'] as String?) ?? '',
+        firebaseUid: (m['firebaseUid'] as String?) ?? '',
         role: (m['role'] as String?) ?? 'member',
         deleted: ((m['deleted'] as num?) ?? 0) == 1,
         hasPasskey: ((m['passkeyHash'] as String?) ?? '').isNotEmpty,
