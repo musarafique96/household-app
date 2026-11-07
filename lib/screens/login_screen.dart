@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth.dart';
+import '../build_info.dart';
 import '../cloud_auth.dart';
 import '../diagnostics.dart';
 import '../data/db.dart';
@@ -417,6 +418,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text(
                           'Sign in to manage your home budget',
                           style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 15),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Build $kBuildId',
+                          style: TextStyle(color: Colors.white.withAlpha(140), fontSize: 12),
                         ),
                         const SizedBox(height: 32),
                         Container(

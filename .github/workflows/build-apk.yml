@@ -134,6 +134,10 @@ jobs:
       - name: Get packages
         run: flutter pub get
 
+      - name: Stamp the build number into the app
+        run: |
+          printf "const String kBuildId = '%s';\n" "${GITHUB_RUN_ID}-${GITHUB_SHA::7}" > lib/build_info.dart
+
       - name: Build debug APK
         run: flutter build apk --debug
 
@@ -148,10 +152,10 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p out
-          cp build/app/outputs/flutter-apk/app-debug.apk out/Gharbaar.apk
+          cp build/app/outputs/flutter-apk/app-debug.apk "out/Gharbaar-${GITHUB_RUN_ID}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Gharbaar-apk
-          path: out/Gharbaar.apk
+          path: out/
