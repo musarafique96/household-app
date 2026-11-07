@@ -29,7 +29,7 @@ class HouseholdApp extends StatelessWidget {
       valueListenable: AppSettings.themeMode,
       builder: (context, mode, _) {
         return MaterialApp(
-          title: 'Household',
+          title: 'Gharbaar',
           debugShowCheckedModeBanner: false,
           theme: buildTheme(dark: false),
           darkTheme: buildTheme(dark: true),

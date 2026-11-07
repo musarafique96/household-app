@@ -40,6 +40,11 @@ jobs:
               t = t.replace(': FlutterActivity()', ': FlutterFragmentActivity()')
               t = t.replace('extends FlutterActivity', 'extends FlutterFragmentActivity')
               f.write_text(t)
+          # Name shown under the app icon on the phone.
+          manifest = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          m = manifest.read_text()
+          m = re.sub(r'(<application[^>]*android:label=")[^"]*(")', r'\1Gharbaar\2', m, count=1)
+          manifest.write_text(m)
           # local_auth needs Android 6.0 (API 23) or newer.
           for f in pathlib.Path('android/app').glob('build.gradle*'):
               t = f.read_text()
@@ -57,10 +62,10 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p out
-          cp build/app/outputs/flutter-apk/app-debug.apk out/HouseholdApp.apk
+          cp build/app/outputs/flutter-apk/app-debug.apk out/Gharbaar.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HouseholdApp-apk
-          path: out/HouseholdApp.apk
+          name: Gharbaar-apk
+          path: out/Gharbaar.apk

@@ -1,5 +1,5 @@
 name: household_app
-description: Household budget, Qattah split and dashboard app.
+description: Gharbaar - household budget, Qattah split, inventory and home management app.
 publish_to: 'none'
 version: 0.1.0+1
 
