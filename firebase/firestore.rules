@@ -18,11 +18,11 @@ service cloud.firestore {
     }
 
     function myProfile() {
-      return get(/databases/$(database)/documents/personal/$(me())/profile).data;
+      return get(/databases/$(database)/documents/personal/$(me())/profile/info).data;
     }
 
     function hasProfile() {
-      return signedIn() && exists(/databases/$(database)/documents/personal/$(me())/profile);
+      return signedIn() && exists(/databases/$(database)/documents/personal/$(me())/profile/info);
     }
 
     // True if an invite key belongs to the signed-in person (by Gmail, phone number or username).
