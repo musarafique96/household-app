@@ -139,7 +139,7 @@ jobs:
           printf "const String kBuildId = '%s';\n" "${GITHUB_RUN_ID}-${GITHUB_SHA::7}" > lib/build_info.dart
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --build-number=${GITHUB_RUN_NUMBER}
 
       - name: Print signing certificates
         run: |
