@@ -36,6 +36,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   late final TextEditingController _username;
   late final TextEditingController _password;
   late final TextEditingController _confirm;
+  late final TextEditingController _currentPassword;
   late final TextEditingController _name;
   late final TextEditingController _phone;
   String _dial = kDefaultDial;
@@ -66,6 +67,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     _username = TextEditingController(text: u?.username ?? '');
     _password = TextEditingController();
     _confirm = TextEditingController();
+    _currentPassword = TextEditingController();
     _name = TextEditingController(text: u?.name ?? '');
     final split = splitPhone(u?.phone ?? '');
     _dial = split.code;
@@ -90,6 +92,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     _username.dispose();
     _password.dispose();
     _confirm.dispose();
+    _currentPassword.dispose();
     _name.dispose();
     _phone.dispose();
     _email.dispose();
@@ -141,6 +144,17 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     setState(() => _saving = true);
     try {
       final password = _password.text;
+
+      // Changing your own password: check the current one, then change it in the cloud too.
+      if (_isSignedInUser && password.isNotEmpty && widget.user != null) {
+        final creds = await Db.instance.credentialsFor(widget.user!.username);
+        if (creds != null &&
+            creds.passwordHash.isNotEmpty &&
+            !Auth.verify(creds.salt, creds.passwordHash, _currentPassword.text)) {
+          throw CloudAuthException('Current password is wrong.');
+        }
+        await CloudAuth.changePassword(_currentPassword.text, password);
+      }
       final phone = _fullPhone;
       String cloudUid = '';
 
@@ -414,6 +428,17 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                           },
                         ),
                         const SizedBox(height: 14),
+                        if (!_isNew && _isSignedInUser) ...[
+                          TextFormField(
+                            controller: _currentPassword,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Current password (to change it)',
+                              prefixIcon: Icon(Icons.lock_outline_rounded),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         TextFormField(
                           controller: _password,
                           obscureText: _obscure,

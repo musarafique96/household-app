@@ -145,6 +145,27 @@ class CloudAuth {
     }
   }
 
+  /// Changes the password of the signed-in username account, after checking the current one.
+  static Future<void> changePassword(String currentPassword, String newPassword) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) return; // not a username account: nothing to change
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        throw CloudAuthException('Current password is wrong.');
+      }
+      if (e.code == 'weak-password') {
+        throw CloudAuthException('Password must be at least 6 characters.');
+      }
+      throw CloudAuthException('Could not change the password: ${e.code}');
+    }
+  }
+
   static Future<void> signOut() async {
     await _google.signOut();
     await _auth.signOut();
