@@ -131,6 +131,18 @@ jobs:
                   f.write_text(t)
           PY
 
+      - name: Download Gradle from Gradle's own server (GitHub download was timing out)
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          p = pathlib.Path('android/gradle/wrapper/gradle-wrapper.properties')
+          t = p.read_text()
+          t = re.sub(r'https\\?://github\.com/gradle/gradle-distributions/releases/download/v[\d.]+/',
+                     'https\\://services.gradle.org/distributions/', t)
+          p.write_text(t)
+          print([l for l in t.splitlines() if 'distributionUrl' in l])
+          PY
+
       - name: Get packages
         run: flutter pub get
 
