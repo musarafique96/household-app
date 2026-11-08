@@ -258,9 +258,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await Db.instance.applyAdminEmail();
       final fresh = (await Db.instance.users()).where((u) => u.id == match!.id);
       if (fresh.isNotEmpty) match = fresh.first;
-      try {
-        await CloudFamily.saveProfile(username: match.username, phone: match.phone);
-      } catch (_) {}
+      // Save the cloud profile in the background, so sign-in does not wait for the network.
+      CloudFamily.saveProfile(username: match.username, phone: match.phone).catchError((_) {});
       await _finishSignIn(match);
     } on CloudAuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
