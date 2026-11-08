@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../auth.dart';
 import '../cloud_auth.dart';
+import '../build_info.dart';
 import '../cloud_family.dart';
 import '../widgets/fancy.dart';
 
@@ -718,21 +719,16 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.red,
                         side: const BorderSide(color: AppColors.red),
-                      ),
-                      onPressed: _deleteMyAccount,
-                      icon: const Icon(Icons.delete_forever_rounded),
-                      label: const Text('Delete my account'),
-                    ),
-                    const SizedBox(height: 14),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.red,
-                        side: const BorderSide(color: AppColors.red),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: _logOut,
                       icon: const Icon(Icons.logout_rounded),
                       label: const Text('Log out'),
+                    ),
+                    const SizedBox(height: 14),
+                    Center(
+                      child: Text('Build $kBuildId',
+                          style: const TextStyle(color: AppColors.muted, fontSize: 12)),
                     ),
                   ],
                   const SizedBox(height: 24),

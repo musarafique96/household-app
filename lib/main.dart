@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_settings.dart';
 import 'data/db.dart';
 import 'data/models.dart';
-import 'screens/account_screen.dart';
+import 'screens/family_screen.dart';
 import 'screens/budget_screen.dart';
 import 'screens/expenses_screen.dart';
 import 'screens/home_screen.dart';
@@ -80,7 +80,7 @@ class _HomeShellState extends State<HomeShell> {
               const ExpensesScreen(key: ValueKey('expenses')),
               SplitScreen(key: ValueKey('split-$id')),
               BudgetScreen(key: ValueKey('budget-$id')),
-              const AccountScreen(key: ValueKey('account')),
+              const FamilyScreen(key: ValueKey('groups')),
             ],
           ),
           bottomNavigationBar: NavigationBar(
@@ -110,7 +110,7 @@ class _HomeShellState extends State<HomeShell> {
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person_rounded),
-                label: 'Accounts',
+                label: 'Groups',
               ),
             ],
           ),

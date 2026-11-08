@@ -94,11 +94,11 @@ class _FamilyScreenState extends State<FamilyScreen> {
   }
 
   Future<void> _createFamily() async {
-    final name = await _askText('Name your family', 'Family name');
+    final name = await _askText('Name your group', 'Group name');
     if (name == null) return;
     await _run(() async {
       await CloudFamily.createFamily(name, _myName);
-    }, 'Family created.');
+    }, 'Group created.');
   }
 
   Future<void> _invite(FamilyInfo f) async {
@@ -109,7 +109,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => FancyAlert(
           icon: Icons.person_add_alt_1_rounded,
-          title: const Text('Invite someone'),
+          title: const Text('Add member'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -162,7 +162,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Family')),
+      appBar: AppBar(title: const Text('Groups')),
       body: CloudAuth.currentUser == null
           ? const Padding(
               padding: EdgeInsets.all(16),
@@ -231,16 +231,16 @@ class _FamilyScreenState extends State<FamilyScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('You are not in a family yet.',
+                            const Text('You are not in a group yet.',
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                             const SizedBox(height: 6),
                             const Text(
-                                'Create a family and invite people by Gmail, phone number or username.'),
+                                'Create a group and add members by Gmail, phone number or username.'),
                             const SizedBox(height: 12),
                             FilledButton.icon(
                               onPressed: _busy ? null : _createFamily,
                               icon: const Icon(Icons.groups_rounded),
-                              label: const Text('Create a family'),
+                              label: const Text('Create a group'),
                             ),
                           ],
                         ),
@@ -284,15 +284,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
             FilledButton.icon(
               onPressed: _busy ? null : () => _invite(f),
               icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Invite someone'),
+              label: const Text('Add member'),
             )
-          else
-            OutlinedButton(
-              onPressed: _busy || _me == null
-                  ? null
-                  : () => _run(() => CloudFamily.removeMember(f.id, _me!), 'You left ${f.name}.'),
-              child: const Text('Leave family'),
-            ),
         ],
       ),
     );
