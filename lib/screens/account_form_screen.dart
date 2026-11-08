@@ -216,7 +216,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   }
 
   /// Turning passkey on asks to set one only the first time; after that it is reused.
-  Future<String?> _askPassword() async {
+  Future<String?> _askPassword([String message = 'Enter your current password to connect this account to the cloud.']) async {
     final c = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -226,7 +226,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter your current password to connect this account to the cloud.'),
+            Text(message),
             const SizedBox(height: 16),
             TextField(
               controller: c,
@@ -276,6 +276,62 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       _showError(e.message);
     } catch (e) {
       _showError('Could not connect. $e');
+    }
+  }
+
+  Future<void> _deleteMyAccount() async {
+    final user = widget.user;
+    if (user == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        icon: Icons.delete_forever_rounded,
+        title: const Text('Delete my account?'),
+        content: const Text(
+            'Your login, Gmail link and phone number are removed, so the username and Gmail can be used again. '
+            'Your past expenses stay in the reports as "Deleted member". This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final pwd = await _askPassword('Enter your password to delete this account.');
+    if (pwd == null) return;
+
+    setState(() => _saving = true);
+    try {
+      final creds = await Db.instance.credentialsFor(user.username);
+      if (creds != null &&
+          creds.passwordHash.isNotEmpty &&
+          !Auth.verify(creds.salt, creds.passwordHash, pwd)) {
+        throw CloudAuthException('That password is not right.');
+      }
+      await CloudAuth.deleteAccount(password: pwd, phone: user.phone);
+      await Db.instance.anonymizeUser(user.id);
+      if (await QuickLogin.enabledUserId() == user.id) {
+        await QuickLogin.disable();
+      }
+      if (mounted) Navigator.pop(context, true);
+      await Session.signOut();
+    } on CloudAuthException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError(e.message);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError('Could not delete the account. $e');
+      }
     }
   }
 
@@ -650,6 +706,16 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                         value: _passkeyOn,
                         onChanged: _togglePasskey,
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.red,
+                        side: const BorderSide(color: AppColors.red),
+                      ),
+                      onPressed: _deleteMyAccount,
+                      icon: const Icon(Icons.delete_forever_rounded),
+                      label: const Text('Delete my account'),
                     ),
                     const SizedBox(height: 14),
                     OutlinedButton.icon(

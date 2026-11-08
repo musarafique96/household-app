@@ -156,6 +156,36 @@ class Db {
     DataChanges.bump();
   }
 
+  /// Removes a member's personal details and login data. The row stays, named "Deleted member",
+  /// so their past expenses and reports still make sense.
+  Future<void> anonymizeUser(int userId) async {
+    final db = await _database;
+    await db.update(
+      'users',
+      {
+        'name': 'Deleted member',
+        'username': '',
+        'passwordHash': '',
+        'salt': '',
+        'passkeyHash': '',
+        'passkeySalt': '',
+        'passkeyEnabled': 0,
+        'phone': '',
+        'email': '',
+        'address': '',
+        'dateOfBirth': '',
+        'firebaseUid': '',
+        'deleted': 1,
+      },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+    await db.delete('recurring', where: 'userId = ?', whereArgs: [userId]);
+    await db.delete('exchange_rates', where: 'userId = ?', whereArgs: [userId]);
+    await db.delete('group_members', where: 'userId = ?', whereArgs: [userId]);
+    DataChanges.bump();
+  }
+
   /// Deletes an account. Its expenses, budgets and history are kept so monthly
   /// totals and reports stay correct, but it can no longer sign in or add anything.
   Future<void> deleteUser(int id) async {

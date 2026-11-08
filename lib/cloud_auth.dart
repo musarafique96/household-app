@@ -166,6 +166,35 @@ class CloudAuth {
     }
   }
 
+  /// Deletes the signed-in account's login, phone number and Gmail link. Frees the username and Gmail.
+  static Future<void> deleteAccount({required String password, required String phone}) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final email = user.email;
+    if (email != null && password.isNotEmpty) {
+      try {
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: email, password: password),
+        );
+      } on FirebaseAuthException {
+        throw CloudAuthException('Current password is wrong.');
+      }
+    }
+    if (phone.isNotEmpty) {
+      final ref = _db.collection('phones').doc(normalizePhone(phone));
+      try {
+        final snap = await ref.get();
+        if (snap.exists && snap.data()?['uid'] == user.uid) await ref.delete();
+      } catch (_) {}
+    }
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw CloudAuthException('Could not delete the login: ${e.code}');
+    }
+    await _google.signOut();
+  }
+
   static Future<void> signOut() async {
     await _google.signOut();
     await _auth.signOut();
