@@ -60,8 +60,13 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
   String get _fullPhone => fullPhone(_dial, _phone.text);
 
   /// Username and Gmail cannot be changed once set.
+  String? _addedUsername;
+  String get _savedUsername => _addedUsername ?? widget.user?.username ?? '';
   bool get _usernameLocked =>
-      !_isNew && ((widget.user?.username ?? '').isNotEmpty || CloudAuth.linkedGmail() != null);
+      !_isNew && (_savedUsername.isNotEmpty || CloudAuth.linkedGmail() != null);
+  // A Gmail account with no username yet: it shows the Add username panel instead of Sign-in.
+  bool get _gmailOnly => !_isNew && CloudAuth.linkedGmail() != null && _savedUsername.isEmpty;
+  bool get _showSignIn => !_gmailOnly;
   bool get _emailLocked => !_isNew && CloudAuth.linkedGmail() != null;
 
   bool get _isSignedInUser =>
@@ -139,7 +144,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       return;
     }
 
-    final username = _usernameLocked ? (widget.user?.username ?? '') : _username.text.trim();
+    final username = _usernameLocked ? _savedUsername : _username.text.trim();
     final existing = username.isEmpty ? null : await Db.instance.findByUsername(username);
     if (existing != null && existing.id != (widget.user?.id ?? -1)) {
       setState(() => _usernameTaken = true);
@@ -148,7 +153,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       return;
     }
     // Checks the cloud too, so a username used on another phone is caught.
-    final isNewName = username.isNotEmpty && username != (widget.user?.username ?? '');
+    final isNewName = username.isNotEmpty && username != _savedUsername;
     if (isNewName && CloudAuth.currentUser != null &&
         await CloudAuth.usernameTakenByOther(username).catchError((_) => false)) {
       setState(() => _usernameTaken = true);
@@ -356,81 +361,6 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     }
   }
 
-  Future<void> _setPasswordForGoogle() async {
-    final p = TextEditingController();
-    final c = TextEditingController();
-    String? err;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => FancyAlert(
-          icon: Icons.lock_rounded,
-          title: const Text('Set a password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('You will sign in with your Gmail address and this password.'),
-              const SizedBox(height: 14),
-              TextField(
-                controller: p,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New password'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: c,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirm password'),
-              ),
-              if (err != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(err!, style: const TextStyle(color: AppColors.red)),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (p.text.length < 6) {
-                  setD(() => err = 'Use at least 6 characters.');
-                } else if (p.text != c.text) {
-                  setD(() => err = 'Passwords do not match.');
-                } else {
-                  Navigator.pop(ctx, true);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    final pwd = p.text;
-    p.dispose();
-    c.dispose();
-    if (ok != true) return;
-
-    setState(() => _saving = true);
-    try {
-      await CloudAuth.setPassword(pwd);
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Password set. You can now sign in with your Gmail and password.')));
-      }
-    } on CloudAuthException catch (e) {
-      if (mounted) {
-        setState(() => _saving = false);
-        _showError(e.message);
-      }
-    }
-  }
-
   Future<void> _addUsername() async {
     final user = widget.user;
     if (user == null) return;
@@ -526,7 +456,11 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       await CloudFamily.saveProfile(username: username, phone: user.phone);
       if (_isSignedInUser) await Session.select(saved);
       if (mounted) {
-        setState(() => _saving = false);
+        setState(() {
+          _saving = false;
+          _addedUsername = username;
+          _username.text = username;
+        });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Username added. You can now sign in with it and your password.')));
       }
@@ -658,6 +592,27 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                         ],
                       ),
                     ),
+                  if (_gmailOnly) ...[
+                    SoftCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Add a username',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                          const SizedBox(height: 6),
+                          const Text(
+                              'Sign in with a username and password too, and be added to groups by username.'),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _addUsername,
+                            child: const Text('Add username'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  if (_showSignIn) ...[
                   SoftCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -698,7 +653,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                             controller: _currentPassword,
                             obscureText: true,
                             decoration: const InputDecoration(
-                              labelText: 'Current password (to change it)',
+                              labelText: 'Current password',
                               prefixIcon: Icon(Icons.lock_outline_rounded),
                             ),
                           ),
@@ -737,6 +692,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  ],
                   SoftCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -865,49 +821,6 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                   ),
                   if (_isSignedInUser) ...[
                     const SizedBox(height: 24),
-                    if (CloudAuth.currentUser != null &&
-                        CloudAuth.linkedGmail() != null &&
-                        !CloudAuth.hasPassword()) ...[
-                      SoftCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Set a password',
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                            const SizedBox(height: 6),
-                            const Text(
-                                'Sign in with your Gmail and a password, and change the password later.'),
-                            const SizedBox(height: 12),
-                            OutlinedButton(
-                              onPressed: _setPasswordForGoogle,
-                              child: const Text('Set password'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                    if (CloudAuth.linkedGmail() != null &&
-                        (widget.user?.username ?? '').isEmpty) ...[
-                      SoftCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Add a username',
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                            const SizedBox(height: 6),
-                            const Text(
-                                'Sign in with a username and password too, and be added to groups by username.'),
-                            const SizedBox(height: 12),
-                            OutlinedButton(
-                              onPressed: _addUsername,
-                              child: const Text('Add username'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
                     if (CloudAuth.linkedGmail() == null) ...[
                       SoftCard(
                         child: Column(
