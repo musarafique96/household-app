@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/data_refresh.dart';
 import '../data/db.dart';
+import '../data/models.dart';
 import '../session.dart';
 import '../split_math.dart';
 import '../theme.dart';
