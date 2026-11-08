@@ -2,8 +2,9 @@ rules_version = '2';
 
 // Gharbaar security rules. People are identified by their account ID (uid), which cannot be faked.
 // - Any signed-in account can create a family and becomes its first admin.
+// - Admins invite people by Gmail, phone number or username. The invite appears only for that person.
 // - Family members read and write shared family data under "familyData".
-// - Each account's own data (no family) lives under "personal" and only that account can read it.
+// - Each account's own data and profile (no family) lives under "personal" and only that account can read it.
 // - Phone numbers are reserved so that each number belongs to one account.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -14,6 +15,23 @@ service cloud.firestore {
 
     function me() {
       return request.auth.uid;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/personal/$(me())/profile).data;
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/personal/$(me())/profile);
+    }
+
+    // True if an invite key belongs to the signed-in person (by Gmail, phone number or username).
+    function inviteIsMine(key) {
+      return signedIn() && (
+        (request.auth.token.email != null && key == 'gmail:' + request.auth.token.email.lower())
+        || (hasProfile() && myProfile().username != '' && key == 'user:' + myProfile().username)
+        || (hasProfile() && myProfile().phone != '' && key == 'phone:' + myProfile().phone)
+      );
     }
 
     function inFamily(fid) {
@@ -32,21 +50,50 @@ service cloud.firestore {
       allow read: if inFamily(fid);
       allow update, delete: if isFamilyAdmin(fid);
 
-      // Members, keyed by account ID. Admins add or remove people.
-      // The creator adds themselves as admin once, right after creating the family.
+      // Members, keyed by account ID.
+      // Admins add or remove people. The creator adds themselves as admin once.
+      // A person who was invited can add themselves when they accept.
       match /members/{uid} {
         allow read: if inFamily(fid) || me() == uid;
         allow create: if isFamilyAdmin(fid)
           || (me() == uid
+              && request.resource.data.role == 'member'
+              && hasInvite(fid))
+          || (me() == uid
               && request.resource.data.role == 'admin'
               && get(/databases/$(database)/documents/families/$(fid)).data.createdBy == me());
-        allow update, delete: if isFamilyAdmin(fid);
+        allow update: if isFamilyAdmin(fid);
+        allow delete: if isFamilyAdmin(fid) || me() == uid;
       }
+    }
+
+    // Is there an invite to this family for the signed-in person?
+    function hasInvite(fid) {
+      return (signedIn() && request.auth.token.email != null
+              && exists(/databases/$(database)/documents/invites/$('gmail:' + request.auth.token.email.lower()))
+              && get(/databases/$(database)/documents/invites/$('gmail:' + request.auth.token.email.lower())).data.familyId == fid)
+          || (hasProfile() && myProfile().username != ''
+              && exists(/databases/$(database)/documents/invites/$('user:' + myProfile().username))
+              && get(/databases/$(database)/documents/invites/$('user:' + myProfile().username)).data.familyId == fid)
+          || (hasProfile() && myProfile().phone != ''
+              && exists(/databases/$(database)/documents/invites/$('phone:' + myProfile().phone))
+              && get(/databases/$(database)/documents/invites/$('phone:' + myProfile().phone)).data.familyId == fid);
     }
 
     // Lets an account find the families it belongs to, by its own ID only.
     match /{path=**}/members/{uid} {
       allow read: if signedIn() && me() == uid;
+    }
+
+    // Invites. The key is 'gmail:<address>', 'user:<username>' or 'phone:<number>'.
+    match /invites/{key} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['familyId', 'familyName', 'invitedBy', 'createdAt'])
+        && isFamilyAdmin(request.resource.data.familyId)
+        && request.resource.data.invitedBy == me();
+      allow read: if inviteIsMine(key) || (signedIn() && resource.data.invitedBy == me());
+      allow delete: if inviteIsMine(key) || (signedIn() && isFamilyAdmin(resource.data.familyId));
+      allow update: if false;
     }
 
     // Shared family data: expenses, budgets, splits, inventory, cooking, and so on.
@@ -62,16 +109,7 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
-    // Sign-in diagnostics: the app can add a short note. Nobody can read notes from the app.
-    // Read them in the Firebase console.
-    match /diagnostics/{id} {
-      allow create: if request.resource.data.keys().hasOnly(['text', 'at'])
-        && request.resource.data.text is string
-        && request.resource.data.text.size() < 2000;
-      allow read, update, delete: if false;
-    }
-
-    // Personal data for accounts that are not in a family.
+    // Each account's own data, and its profile (username, phone, Gmail) used to match invites.
     match /personal/{uid}/{document=**} {
       allow read, write: if signedIn() && me() == uid;
     }
