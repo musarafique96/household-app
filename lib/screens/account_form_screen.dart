@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../auth.dart';
 import '../cloud_auth.dart';
+import '../cloud_family.dart';
 import '../widgets/fancy.dart';
 
 import '../currencies.dart';
@@ -200,6 +201,11 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
 
       if (cloudUid.isNotEmpty) {
         await Db.instance.setFirebaseUid(saved.id, cloudUid);
+      }
+      if (CloudAuth.currentUser != null) {
+        try {
+          await CloudFamily.saveProfile(username: saved.username, phone: saved.phone);
+        } catch (_) {}
       }
 
       // Sign in after registering, and keep the signed-in details up to date.

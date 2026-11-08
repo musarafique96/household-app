@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'family_screen.dart';
+
 import '../quick_login.dart';
 import '../widgets/data_refresh.dart';
 import '../data/db.dart';
@@ -281,6 +283,18 @@ class _AccountScreenState extends State<AccountScreen> with DataRefreshState<Acc
                               label: 'Manage Members',
                               color: AppColors.pink,
                               onTap: () => setState(() => _showGroups = true),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: QuickTile(
+                              icon: Icons.groups_rounded,
+                              label: 'Family',
+                              color: AppColors.blue,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const FamilyScreen()),
+                              ),
                             ),
                           ),
                         ],

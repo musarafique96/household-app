@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../auth.dart';
 import '../build_info.dart';
 import '../cloud_auth.dart';
+import '../cloud_family.dart';
 import '../diagnostics.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -222,6 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (c.user.firebaseUid.isEmpty) {
         await Db.instance.setFirebaseUid(c.user.id, cloud.uid);
       }
+      await CloudFamily.saveProfile(username: username, phone: c.user.phone);
     } catch (_) {}
 
     await _finishSignIn(c.user);
@@ -253,6 +255,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (match.firebaseUid.isEmpty) {
         await Db.instance.setFirebaseUid(match.id, cloud.uid);
       }
+      try {
+        await CloudFamily.saveProfile(username: match.username, phone: match.phone);
+      } catch (_) {}
       await _finishSignIn(match);
     } on CloudAuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
