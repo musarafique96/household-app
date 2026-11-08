@@ -26,6 +26,7 @@ class FamilyScreen extends StatefulWidget {
 class _FamilyScreenState extends State<FamilyScreen> {
   late Future<_GroupsData> _future;
   bool _busy = false;
+  bool _showRequests = false;
 
   String? get _me => CloudAuth.currentUser?.uid;
   String get _myName => Session.current.value?.name ?? 'Member';
@@ -33,10 +34,13 @@ class _FamilyScreenState extends State<FamilyScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _future = _fetch();
   }
 
-  void _reload() => setState(() => _future = _load());
+  // Gives up after 20 seconds, so a slow or offline connection shows an error instead of spinning forever.
+  Future<_GroupsData> _fetch() => _load().timeout(const Duration(seconds: 20));
+
+  void _reload() => setState(() => _future = _fetch());
 
   void _snack(String text) {
     if (!mounted) return;
@@ -177,39 +181,95 @@ class _FamilyScreenState extends State<FamilyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Groups'),
-          bottom: const TabBar(
-            tabs: [Tab(text: 'Groups'), Tab(text: 'Requests')],
-          ),
-        ),
-        body: CloudAuth.currentUser == null
-            ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: SoftCard(
-                  child: Text(
-                      'Connect to the cloud first. Sign in with Google, or sign in with your username and password.'),
+    final signedIn = CloudAuth.currentUser != null;
+    return Scaffold(
+      body: Column(
+        children: [
+          GradientHeader(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Text('Groups',
+                        style: TextStyle(
+                            color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                    const Spacer(),
+                    if (signedIn)
+                      IconButton(
+                        tooltip: 'Create group',
+                        onPressed: _busy ? null : _createGroup,
+                        icon: const Icon(Icons.add_rounded, color: Colors.white),
+                      ),
+                  ],
                 ),
-              )
-            : FutureBuilder<_GroupsData>(
-                future: _future,
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final d = snap.data!;
-                  return TabBarView(
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
                     children: [
-                      _groupsTab(d),
-                      _requestsTab(d),
+                      _ToggleOption(
+                        label: 'Groups',
+                        selected: !_showRequests,
+                        onTap: () => setState(() => _showRequests = false),
+                      ),
+                      _ToggleOption(
+                        label: 'Requests',
+                        selected: _showRequests,
+                        onTap: () => setState(() => _showRequests = true),
+                      ),
                     ],
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: _content()),
+        ],
       ),
+    );
+  }
+
+  Widget _content() {
+    if (CloudAuth.currentUser == null) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: SoftCard(
+          child: Text(
+              'Connect to the cloud first. Sign in with Google, or sign in with your username and password.'),
+        ),
+      );
+    }
+    return FutureBuilder<_GroupsData>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Couldn't load groups and requests.",
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text('${snap.error}', style: const TextStyle(color: AppColors.muted)),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: _reload, child: const Text('Try again')),
+                ],
+              ),
+            ),
+          );
+        }
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final d = snap.data!;
+        return _showRequests ? _requestsTab(d) : _groupsTab(d);
+      },
     );
   }
 
@@ -381,6 +441,39 @@ class _FamilyScreenState extends State<FamilyScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _ToggleOption extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ToggleOption({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : AppColors.deep,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
