@@ -196,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (c == null) {
       setState(() {
         _busy = false;
-        _error = 'No account has that username.';
+        _error = 'Invalid username or password.';
       });
       return;
     }
@@ -211,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!Auth.verify(c.salt, c.passwordHash, password)) {
       setState(() {
         _busy = false;
-        _error = 'That password is not right.';
+        _error = 'Invalid username or password.';
       });
       return;
     }
