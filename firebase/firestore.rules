@@ -1,11 +1,10 @@
 rules_version = '2';
 
 // Gharbaar security rules. People are identified by their account ID (uid), which cannot be faked.
-// - Any signed-in account can create a family and becomes its first admin.
-// - Admins invite people by Gmail, phone number or username. The invite appears only for that person.
-// - Family members read and write shared family data under "familyData".
-// - Each account's own data and profile (no family) lives under "personal" and only that account can read it.
-// - Phone numbers are reserved so that each number belongs to one account.
+// - Any signed-in account can create a group and becomes its admin.
+// - Any member of a group can add a person to it. The person gets a request, and joins only when they accept.
+// - Only a group admin can remove a member. A member can leave.
+// - Family data lives under "familyData". Each account's own data lives under "personal".
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -17,20 +16,20 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    function myProfile() {
-      return get(/databases/$(database)/documents/personal/$(me())/profile/info).data;
-    }
-
     function hasProfile() {
       return signedIn() && exists(/databases/$(database)/documents/personal/$(me())/profile/info);
     }
 
-    // True if an invite key belongs to the signed-in person (by Gmail, phone number or username).
-    function inviteIsMine(key) {
+    function myProfile() {
+      return get(/databases/$(database)/documents/personal/$(me())/profile/info).data;
+    }
+
+    // True if an invite target belongs to the signed-in person (by Gmail, phone number or username).
+    function inviteIsMine(target) {
       return signedIn() && (
-        (request.auth.token.email != null && key == 'gmail:' + request.auth.token.email.lower())
-        || (hasProfile() && myProfile().username != '' && key == 'user:' + myProfile().username)
-        || (hasProfile() && myProfile().phone != '' && key == 'phone:' + myProfile().phone)
+        (request.auth.token.email != null && target == 'gmail:' + request.auth.token.email.lower())
+        || (hasProfile() && myProfile().username != '' && target == 'user:' + myProfile().username)
+        || (hasProfile() && myProfile().phone != '' && target == 'phone:' + myProfile().phone)
       );
     }
 
@@ -44,59 +43,68 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/families/$(fid)/members/$(me())).data.role == 'admin';
     }
 
-    // A family. The creator is recorded so they can add themselves as the first admin.
+    // The signed-in person has a pending request to join this group.
+    function hasPendingInvite(fid) {
+      return signedIn() && (
+        (request.auth.token.email != null
+          && exists(/databases/$(database)/documents/invites/$(fid + '|gmail:' + request.auth.token.email.lower()))
+          && get(/databases/$(database)/documents/invites/$(fid + '|gmail:' + request.auth.token.email.lower())).data.status == 'pending')
+        || (hasProfile() && myProfile().username != ''
+          && exists(/databases/$(database)/documents/invites/$(fid + '|user:' + myProfile().username))
+          && get(/databases/$(database)/documents/invites/$(fid + '|user:' + myProfile().username)).data.status == 'pending')
+        || (hasProfile() && myProfile().phone != ''
+          && exists(/databases/$(database)/documents/invites/$(fid + '|phone:' + myProfile().phone))
+          && get(/databases/$(database)/documents/invites/$(fid + '|phone:' + myProfile().phone)).data.status == 'pending')
+      );
+    }
+
+    // A group. The creator is recorded so they can add themselves as the first admin.
     match /families/{fid} {
       allow create: if signedIn() && request.resource.data.createdBy == me();
       allow read: if inFamily(fid);
-      allow update, delete: if isFamilyAdmin(fid);
+      // Any member can rename the group.
+      allow update: if inFamily(fid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+      allow delete: if isFamilyAdmin(fid);
 
-      // Members, keyed by account ID.
-      // Admins add or remove people. The creator adds themselves as admin once.
-      // A person who was invited can add themselves when they accept.
       match /members/{uid} {
         allow read: if inFamily(fid) || me() == uid;
+        // Admins can add members directly. A person can join only by accepting a pending request.
         allow create: if isFamilyAdmin(fid)
-          || (me() == uid
-              && request.resource.data.role == 'member'
-              && hasInvite(fid))
-          || (me() == uid
-              && request.resource.data.role == 'admin'
+          || (me() == uid && request.resource.data.role == 'member' && hasPendingInvite(fid))
+          || (me() == uid && request.resource.data.role == 'admin'
               && get(/databases/$(database)/documents/families/$(fid)).data.createdBy == me());
         allow update: if isFamilyAdmin(fid);
+        // Admins remove members. A member can leave.
         allow delete: if isFamilyAdmin(fid) || me() == uid;
       }
     }
 
-    // Is there an invite to this family for the signed-in person?
-    function hasInvite(fid) {
-      return (signedIn() && request.auth.token.email != null
-              && exists(/databases/$(database)/documents/invites/$('gmail:' + request.auth.token.email.lower()))
-              && get(/databases/$(database)/documents/invites/$('gmail:' + request.auth.token.email.lower())).data.familyId == fid)
-          || (hasProfile() && myProfile().username != ''
-              && exists(/databases/$(database)/documents/invites/$('user:' + myProfile().username))
-              && get(/databases/$(database)/documents/invites/$('user:' + myProfile().username)).data.familyId == fid)
-          || (hasProfile() && myProfile().phone != ''
-              && exists(/databases/$(database)/documents/invites/$('phone:' + myProfile().phone))
-              && get(/databases/$(database)/documents/invites/$('phone:' + myProfile().phone)).data.familyId == fid);
-    }
-
-    // Lets an account find the families it belongs to, by its own ID only.
+    // Lets an account find the groups it belongs to, by its own ID only.
     match /{path=**}/members/{uid} {
       allow read: if signedIn() && me() == uid;
     }
 
-    // Invites. The key is 'gmail:<address>', 'user:<username>' or 'phone:<number>'.
-    match /invites/{key} {
+    // Requests to join a group. The id is "<groupId>|<target>", e.g. "abc|user:musa".
+    match /invites/{id} {
+      // Any member of the group can send a request.
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['familyId', 'familyName', 'invitedBy', 'createdAt'])
-        && isFamilyAdmin(request.resource.data.familyId)
-        && request.resource.data.invitedBy == me();
-      allow read: if inviteIsMine(key) || (signedIn() && resource.data.invitedBy == me());
-      allow delete: if inviteIsMine(key) || (signedIn() && isFamilyAdmin(resource.data.familyId));
-      allow update: if false;
+        && request.resource.data.keys().hasOnly(['familyId', 'familyName', 'invitedBy', 'invitedByName', 'targetKey', 'status', 'createdAt'])
+        && inFamily(request.resource.data.familyId)
+        && request.resource.data.invitedBy == me()
+        && request.resource.data.status == 'pending'
+        && id == request.resource.data.familyId + '|' + request.resource.data.targetKey;
+      // The person asked can see the request. The sender can see the requests they sent.
+      allow read: if signedIn() && (inviteIsMine(resource.data.targetKey) || resource.data.invitedBy == me());
+      // The person asked can accept or reject. Only the status can change.
+      allow update: if signedIn() && inviteIsMine(resource.data.targetKey)
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if signedIn() && (resource.data.invitedBy == me() || isFamilyAdmin(resource.data.familyId));
     }
 
-    // Shared family data: expenses, budgets, splits, inventory, cooking, and so on.
+    // Shared group data: expenses, budgets, splits, inventory, cooking, and so on.
     match /familyData/{fid}/{document=**} {
       allow read, write: if inFamily(fid);
     }
@@ -109,7 +117,7 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
-    // Each account's own data, and its profile (username, phone, Gmail) used to match invites.
+    // Each account's own data, and its profile (username, phone, Gmail) used to match requests.
     match /personal/{uid}/{document=**} {
       allow read, write: if signedIn() && me() == uid;
     }
