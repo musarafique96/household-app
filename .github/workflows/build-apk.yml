@@ -151,7 +151,11 @@ jobs:
           printf "const String kBuildId = '%s';\n" "${GITHUB_RUN_ID}-${GITHUB_SHA::7}" > lib/build_info.dart
 
       - name: Build debug APK
-        run: flutter build apk --debug --build-number=${GITHUB_RUN_NUMBER}
+        run: |
+          # Flutter can rewrite the Gradle address during the build, so change it again right before.
+          sed -i 's#https\\://github.com/gradle/gradle-distributions/releases/download/v[0-9.]*/#https\\://services.gradle.org/distributions/#' android/gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+          flutter build apk --debug --build-number=${GITHUB_RUN_NUMBER}
 
       - name: Print signing certificates
         run: |
