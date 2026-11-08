@@ -787,8 +787,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                                   for (final c in kDialCodes)
                                     DropdownMenuItem(
                                       value: c.code,
-                                      child: Text('${c.code} ${c.country}',
-                                          overflow: TextOverflow.ellipsis),
+                                      child: Text(c.code),
                                     ),
                                 ],
                                 onChanged: (v) => setState(() => _dial = v ?? _dial),
