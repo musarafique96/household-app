@@ -22,7 +22,7 @@ Future<void> main() async {
     debugPrint('Firebase did not start: $e');
   }
   await AppSettings.load();
-  await Db.instance.ensureDefaultAdmin();
+  await Db.instance.applyAdminEmail();
   Session.restore();
   runApp(const HouseholdApp());
 }

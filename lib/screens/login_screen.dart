@@ -254,6 +254,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (match.firebaseUid.isEmpty) {
         await Db.instance.setFirebaseUid(match.id, cloud.uid);
       }
+      // The Gmail admin account gets the admin role.
+      await Db.instance.applyAdminEmail();
+      final fresh = (await Db.instance.users()).where((u) => u.id == match!.id);
+      if (fresh.isNotEmpty) match = fresh.first;
       try {
         await CloudFamily.saveProfile(username: match.username, phone: match.phone);
       } catch (_) {}

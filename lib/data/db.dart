@@ -10,6 +10,9 @@ import 'models.dart';
 
 /// Offline local database. A future online backend can replace this class
 /// while the screens keep calling the same methods.
+/// The one account that is the app admin (its Gmail, also its Firebase sign-in).
+const String kAdminEmail = 'rafique.musa96@gmail.com';
+
 class Db {
   Db._();
   static final Db instance = Db._();
@@ -235,46 +238,15 @@ class Db {
     return rows.map(AppUser.fromMap).toList();
   }
 
-  /// Makes sure the default admin account exists (username musa, admin role).
-  /// An existing account named Musa is promoted instead of duplicated.
-  Future<void> ensureDefaultAdmin() async {
-    const username = 'musa';
-    const password = 'musa181214';
+  /// Admin is this Gmail account only. Every other account is a member.
+  /// Runs at startup and after Google sign-in.
+  Future<void> applyAdminEmail() async {
     final db = await _database;
-
-    final existing = await findByUsername(username);
-    if (existing != null) {
-      if (!existing.isAdmin) {
-        await db.update('users', {'role': 'admin'}, where: 'id = ?', whereArgs: [existing.id]);
-        DataChanges.bump();
-      }
-      return;
-    }
-
-    final rows = await db.query(
-      'users',
-      where: 'name = ? COLLATE NOCASE',
-      whereArgs: ['Musa'],
-      orderBy: 'id',
-      limit: 1,
-    );
-    final base = rows.isNotEmpty
-        ? AppUser.fromMap(rows.first)
-        : const AppUser(id: 0, username: username, name: 'Musa', currency: 'PKR');
-    await saveUser(
-      AppUser(
-        id: base.id,
-        username: username,
-        name: base.name,
-        currency: base.currency,
-        phone: base.phone,
-        email: base.email,
-        address: base.address,
-        dateOfBirth: base.dateOfBirth,
-        role: 'admin',
-      ),
-      password: password,
-    );
+    await db.update('users', {'role': 'member'},
+        where: "role = 'admin' AND lower(email) != ?", whereArgs: [kAdminEmail]);
+    await db.update('users', {'role': 'admin'},
+        where: 'lower(email) = ?', whereArgs: [kAdminEmail]);
+    DataChanges.bump();
   }
 
   /// Finds an account by username, ignoring case. Null if none.
