@@ -85,23 +85,28 @@ class CloudFamily {
     }
   }
 
+  /// Records that this person is in a group. Listed by uid, so the app can show their groups.
+  static Future<void> _recordMembership(String familyId, String uid) =>
+      _db.collection('memberships').doc('${familyId}_$uid').set({'uid': uid, 'familyId': familyId});
+
   /// Groups the signed-in person is in (created by them, or joined).
   static Future<List<FamilyInfo>> myFamilies() async {
     final user = _me;
     if (user == null) return [];
-    final memberships = await _db
-        .collectionGroup('members')
-        .where(FieldPath.documentId, isEqualTo: user.uid)
-        .get();
+    final memberships = await _db.collection('memberships').where('uid', isEqualTo: user.uid).get();
     final result = <FamilyInfo>[];
     for (final m in memberships.docs) {
-      final family = m.reference.parent.parent;
-      if (family == null) continue;
+      final fid = m.data()['familyId'] as String?;
+      if (fid == null) continue;
+      final family = _db.collection('families').doc(fid);
       final doc = await family.get();
+      final member = await family.collection('members').doc(user.uid).get();
+      // Skip groups the person has since left or been removed from.
+      if (!doc.exists || !member.exists) continue;
       result.add(FamilyInfo(
-        family.id,
+        fid,
         (doc.data()?['name'] as String?) ?? 'Group',
-        (m.data()['role'] as String?) == 'admin',
+        (member.data()?['role'] as String?) == 'admin',
       ));
     }
     return result;
@@ -114,6 +119,7 @@ class CloudFamily {
     final family = _db.collection('families').doc();
     await family.set({'name': name, 'createdBy': user.uid});
     await family.collection('members').doc(user.uid).set({'role': 'admin', 'name': myName});
+    await _recordMembership(family.id, user.uid);
     return family.id;
   }
 
@@ -213,6 +219,7 @@ class CloudFamily {
       'role': 'member',
       'name': myName,
     });
+    await _recordMembership(invite.familyId, user.uid);
     await _db.collection('invites').doc(invite.id).update({'status': 'approved'});
   }
 

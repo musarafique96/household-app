@@ -105,6 +105,12 @@ service cloud.firestore {
     }
 
     // Shared group data: expenses, budgets, splits, inventory, cooking, and so on.
+    // Which groups a person is in, so the app can list them. One document per membership.
+    match /memberships/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == me();
+      allow create, update: if signedIn() && request.resource.data.uid == me();
+    }
+
     match /familyData/{fid}/{document=**} {
       allow read, write: if inFamily(fid);
     }
