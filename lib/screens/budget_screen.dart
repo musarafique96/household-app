@@ -255,6 +255,8 @@ class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<Budge
                             currency: cur,
                           ),
                         ),
+                      // Shown only when there are no categories. The + in the header stays.
+                      if (rows.isEmpty) ...[
                       const SizedBox(height: 8),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
@@ -265,6 +267,7 @@ class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<Budge
                         icon: const Icon(Icons.add_rounded),
                         label: const Text('Add Budget Category'),
                       ),
+                      ],
                     ],
                   ),
                 ),
