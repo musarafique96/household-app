@@ -274,94 +274,142 @@ class _FamilyScreenState extends State<FamilyScreen> {
   }
 
   Widget _groupsTab(_GroupsData d) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         for (final g in d.groups) ...[
-          _groupCard(g, d.members[g.id] ?? const []),
-          const SizedBox(height: 14),
+          _groupCard(g, d.members[g.id] ?? const [], dark),
+          const SizedBox(height: 16),
         ],
+        // Shown only when there are no groups. The + in the header stays for creating more.
         if (d.groups.isEmpty)
-          SoftCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('You are not in a group yet.',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                const Text('Create a group, then add members by Gmail, phone number or username.'),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _createGroup,
-                  icon: const Icon(Icons.groups_rounded),
-                  label: const Text('Create a group'),
-                ),
-              ],
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(54),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
-          ),
-        if (d.groups.isNotEmpty)
-          OutlinedButton.icon(
             onPressed: _busy ? null : _createGroup,
             icon: const Icon(Icons.add_rounded),
-            label: const Text('Create another group'),
+            label: const Text('Create Group',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           ),
       ],
     );
   }
 
-  Widget _groupCard(FamilyInfo g, List<FamilyMember> members) {
-    return SoftCard(
+  Widget _groupCard(FamilyInfo g, List<FamilyMember> members, bool dark) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1C1733) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withAlpha(70)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              _iconBubble(Icons.home_rounded),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(g.name,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               ),
-              IconButton(
-                tooltip: 'Change name',
-                icon: const Icon(Icons.edit_rounded),
-                onPressed: _busy ? null : () => _rename(g),
+              _iconBubble(Icons.edit_rounded,
+                  tooltip: 'Change name', onTap: _busy ? null : () => _rename(g)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          for (final m in members) ...[
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.primary.withAlpha(40),
+                  child: Icon(Icons.people_alt_rounded, color: AppColors.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(m.name,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            m.isAdmin
+                                ? Icons.workspace_premium_rounded
+                                : Icons.person_outline_rounded,
+                            size: 16,
+                            color: m.isAdmin ? AppColors.primary : AppColors.muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(m.isAdmin ? 'Admin' : 'Member',
+                              style: TextStyle(
+                                  color: m.isAdmin ? AppColors.primary : AppColors.muted,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (g.isAdmin && m.uid != _me)
+                  IconButton(
+                    tooltip: 'Remove from group',
+                    icon: const Icon(Icons.person_remove_rounded),
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => CloudFamily.removeMember(g.id, m.uid),
+                            '${m.name} removed.'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () => _addMember(g),
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('Add member'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _run(() => CloudFamily.leaveFamily(g.id), 'You left ${g.name}.'),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Exit group'),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          for (final m in members)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                m.isAdmin ? Icons.admin_panel_settings_rounded : Icons.person_rounded,
-                color: AppColors.primary,
-              ),
-              title: Text(m.name),
-              subtitle: Text(m.isAdmin ? 'Admin' : 'Member'),
-              trailing: g.isAdmin && m.uid != _me
-                  ? IconButton(
-                      tooltip: 'Remove from group',
-                      icon: const Icon(Icons.person_remove_rounded),
-                      onPressed: _busy
-                          ? null
-                          : () => _run(() => CloudFamily.removeMember(g.id, m.uid),
-                              '${m.name} removed.'),
-                    )
-                  : null,
-            ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: _busy ? null : () => _addMember(g),
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            label: const Text('Add member'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: _busy
-                ? null
-                : () => _run(() => CloudFamily.leaveFamily(g.id), 'You left ${g.name}.'),
-            child: const Text('Exit group'),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _iconBubble(IconData icon, {String? tooltip, VoidCallback? onTap}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(color: AppColors.primary.withAlpha(40), shape: BoxShape.circle),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
       ),
     );
   }
