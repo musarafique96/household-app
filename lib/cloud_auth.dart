@@ -221,6 +221,28 @@ class CloudAuth {
     }
   }
 
+  /// Adds a username and password to a Gmail account, so it can also sign in with them.
+  static Future<void> addUsername(String username, String password) async {
+    final user = _auth.currentUser;
+    if (user == null) throw CloudAuthException('Sign in with Gmail first.');
+    try {
+      await user.linkWithCredential(
+        EmailAuthProvider.credential(email: emailFor(username), password: password),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use' || e.code == 'credential-already-in-use') {
+        throw CloudAuthException('That username is already taken.');
+      }
+      if (e.code == 'provider-already-linked') {
+        throw CloudAuthException('This account already has a username.');
+      }
+      if (e.code == 'weak-password') {
+        throw CloudAuthException('Password must be at least 6 characters.');
+      }
+      throw CloudAuthException('Could not add the username: ${e.code}');
+    }
+  }
+
   static Future<void> signOut() async {
     await _google.signOut();
     await _auth.signOut();

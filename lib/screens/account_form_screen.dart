@@ -417,6 +417,110 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     }
   }
 
+  Future<void> _addUsername() async {
+    final user = widget.user;
+    if (user == null) return;
+    final u = TextEditingController();
+    final p = TextEditingController();
+    final c = TextEditingController();
+    String? err;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => FancyAlert(
+          icon: Icons.alternate_email_rounded,
+          title: const Text('Add a username'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: u,
+                decoration: const InputDecoration(labelText: 'Username (3-20 letters, numbers, _)'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: p,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: c,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm password'),
+              ),
+              if (err != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(err!, style: const TextStyle(color: AppColors.red)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!CloudAuth.validUsername(u.text.trim())) {
+                  setD(() => err = 'Use 3-20 letters, numbers or _.');
+                } else if (p.text.length < 6) {
+                  setD(() => err = 'Use at least 6 characters.');
+                } else if (p.text != c.text) {
+                  setD(() => err = 'Passwords do not match.');
+                } else {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final username = u.text.trim().toLowerCase();
+    final pwd = p.text;
+    u.dispose();
+    p.dispose();
+    c.dispose();
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      final taken = await Db.instance.findByUsername(username);
+      if (taken != null) throw CloudAuthException('That username is already taken.');
+      await CloudAuth.addUsername(username, pwd);
+      final saved = await Db.instance.saveUser(
+        AppUser(
+          id: user.id,
+          name: user.name,
+          currency: user.currency,
+          username: username,
+          role: user.role,
+          deleted: user.deleted,
+          phone: user.phone,
+          email: user.email,
+          address: user.address,
+          dateOfBirth: user.dateOfBirth,
+        ),
+        password: pwd,
+      );
+      await CloudFamily.saveProfile(username: username, phone: user.phone);
+      if (_isSignedInUser) await Session.select(saved);
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Username added. You can now sign in with it and your password.')));
+      }
+    } on CloudAuthException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError(e.message);
+      }
+    }
+  }
+
   Future<void> _linkGmail() async {
     try {
       await CloudAuth.linkGmail();
@@ -753,6 +857,27 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                             OutlinedButton(
                               onPressed: _setPasswordForGoogle,
                               child: const Text('Set password'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    if (CloudAuth.linkedGmail() != null &&
+                        (widget.user?.username ?? '').isEmpty) ...[
+                      SoftCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Add a username',
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            const SizedBox(height: 6),
+                            const Text(
+                                'Sign in with a username and password too, and be added to groups by username.'),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _addUsername,
+                              child: const Text('Add username'),
                             ),
                           ],
                         ),
