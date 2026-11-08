@@ -195,6 +195,32 @@ class CloudAuth {
     await _google.signOut();
   }
 
+  /// True if the signed-in account can also sign in with a password.
+  static bool hasPassword() {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'password');
+  }
+
+  /// Gives a Gmail-only account a password, which it signs in with along with its Gmail address.
+  static Future<void> setPassword(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) throw CloudAuthException('Sign in with Gmail first.');
+    if (hasPassword()) throw CloudAuthException('This account already has a password.');
+    try {
+      await user.linkWithCredential(EmailAuthProvider.credential(email: email, password: password));
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'weak-password') {
+        throw CloudAuthException('Password must be at least 6 characters.');
+      }
+      if (e.code == 'provider-already-linked' || e.code == 'email-already-in-use') {
+        throw CloudAuthException('This account already has a password.');
+      }
+      throw CloudAuthException('Could not set the password: ${e.code}');
+    }
+  }
+
   static Future<void> signOut() async {
     await _google.signOut();
     await _auth.signOut();

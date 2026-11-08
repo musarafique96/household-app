@@ -342,6 +342,81 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     }
   }
 
+  Future<void> _setPasswordForGoogle() async {
+    final p = TextEditingController();
+    final c = TextEditingController();
+    String? err;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => FancyAlert(
+          icon: Icons.lock_rounded,
+          title: const Text('Set a password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('You will sign in with your Gmail address and this password.'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: p,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: c,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm password'),
+              ),
+              if (err != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(err!, style: const TextStyle(color: AppColors.red)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (p.text.length < 6) {
+                  setD(() => err = 'Use at least 6 characters.');
+                } else if (p.text != c.text) {
+                  setD(() => err = 'Passwords do not match.');
+                } else {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final pwd = p.text;
+    p.dispose();
+    c.dispose();
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await CloudAuth.setPassword(pwd);
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Password set. You can now sign in with your Gmail and password.')));
+      }
+    } on CloudAuthException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError(e.message);
+      }
+    }
+  }
+
   Future<void> _linkGmail() async {
     try {
       await CloudAuth.linkGmail();
@@ -662,6 +737,28 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                   ),
                   if (_isSignedInUser) ...[
                     const SizedBox(height: 24),
+                    if (CloudAuth.currentUser != null &&
+                        CloudAuth.linkedGmail() != null &&
+                        !CloudAuth.hasPassword()) ...[
+                      SoftCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Set a password',
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            const SizedBox(height: 6),
+                            const Text(
+                                'Sign in with your Gmail and a password, and change the password later.'),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _setPasswordForGoogle,
+                              child: const Text('Set password'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     if (CloudAuth.linkedGmail() == null) ...[
                       SoftCard(
                         child: Column(
