@@ -59,6 +59,11 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
 
   String get _fullPhone => fullPhone(_dial, _phone.text);
 
+  /// Username and Gmail cannot be changed once set.
+  bool get _usernameLocked =>
+      !_isNew && ((widget.user?.username ?? '').isNotEmpty || CloudAuth.linkedGmail() != null);
+  bool get _emailLocked => !_isNew && CloudAuth.linkedGmail() != null;
+
   bool get _isSignedInUser =>
       !_isNew && Session.current.value?.id == widget.user!.id;
 
@@ -134,9 +139,18 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       return;
     }
 
-    final username = _username.text.trim();
-    final existing = await Db.instance.findByUsername(username);
+    final username = _usernameLocked ? (widget.user?.username ?? '') : _username.text.trim();
+    final existing = username.isEmpty ? null : await Db.instance.findByUsername(username);
     if (existing != null && existing.id != (widget.user?.id ?? -1)) {
+      setState(() => _usernameTaken = true);
+      _formKey.currentState?.validate();
+      _showError('That username is already taken. Choose another.');
+      return;
+    }
+    // Checks the cloud too, so a username used on another phone is caught.
+    final isNewName = username.isNotEmpty && username != (widget.user?.username ?? '');
+    if (isNewName && CloudAuth.currentUser != null &&
+        await CloudAuth.usernameTakenByOther(username).catchError((_) => false)) {
       setState(() => _usernameTaken = true);
       _formKey.currentState?.validate();
       _showError('That username is already taken. Choose another.');
@@ -192,7 +206,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
           name: _name.text.trim(),
           currency: _currency,
           phone: _fullPhone,
-          email: _email.text.trim(),
+          email: _emailLocked ? (CloudAuth.linkedGmail() ?? '') : _email.text.trim(),
           address: _address.text.trim(),
           dateOfBirth: _dob,
           role: widget.user?.role ?? 'member',
@@ -490,6 +504,9 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     try {
       final taken = await Db.instance.findByUsername(username);
       if (taken != null) throw CloudAuthException('That username is already taken.');
+      if (await CloudAuth.usernameTakenByOther(username)) {
+        throw CloudAuthException('That username is already taken.');
+      }
       await CloudAuth.addUsername(username, pwd);
       final saved = await Db.instance.saveUser(
         AppUser(
@@ -652,16 +669,22 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                         TextFormField(
                           controller: _username,
                           autocorrect: false,
+                          readOnly: _usernameLocked,
                           onChanged: (_) {
                             if (_usernameTaken) setState(() => _usernameTaken = false);
                           },
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Username *',
-                            helperText: '3–20 letters, numbers, _ or .',
+                            helperText: _usernameLocked
+                                ? ((widget.user?.username ?? '').isEmpty
+                                    ? 'Add it with the Add username button below'
+                                    : 'Cannot be changed once created')
+                                : '3–20 letters, numbers, _ or .',
                             prefixIcon: Icon(Icons.alternate_email_rounded),
                           ),
                           validator: (v) {
                             final t = v?.trim() ?? '';
+                            if (_usernameLocked) return null;
                             if (_usernameTaken) return 'This username is already taken';
                             if (t.isEmpty) return 'Please enter a username';
                             return RegExp(r'^[a-zA-Z0-9_.]{3,20}$').hasMatch(t)
@@ -785,8 +808,10 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
                         TextFormField(
                           controller: _email,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
+                          readOnly: _emailLocked,
+                          decoration: InputDecoration(
                             labelText: 'Email',
+                            helperText: _emailLocked ? 'Your linked Gmail cannot be changed' : null,
                             prefixIcon: Icon(Icons.mail_rounded),
                           ),
                           validator: (v) {

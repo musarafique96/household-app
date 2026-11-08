@@ -61,6 +61,16 @@ class CloudFamily {
       'phone': phone.isEmpty ? '' : CloudAuth.normalizePhone(phone),
       'email': user.email ?? '',
     }, SetOptions(merge: true));
+    // Make the username and Gmail findable in the cloud (fails quietly if another account has them).
+    try {
+      await CloudAuth.claimIndex('usernames', username.toLowerCase());
+    } catch (_) {}
+    final gmail = CloudAuth.linkedGmail();
+    if (gmail != null) {
+      try {
+        await CloudAuth.claimIndex('gmails', gmail.toLowerCase());
+      } catch (_) {}
+    }
   }
 
   /// Target for a request: 'gmail:<address>', 'phone:<number>' or 'user:<username>'.
@@ -131,6 +141,16 @@ class CloudFamily {
     if (user == null) throw CloudAuthException('Sign in first.');
     final key = targetKey(kind, value);
     if (key.endsWith(':')) throw CloudAuthException('Enter a Gmail, phone number or username.');
+    // The person must already have a cloud account.
+    final id = kind == 'phone' ? CloudAuth.normalizePhone(value) : value.trim().toLowerCase();
+    final collection = kind == 'gmail' ? 'gmails' : kind == 'phone' ? 'phones' : 'usernames';
+    if (!await CloudAuth.accountExists(collection, id)) {
+      throw CloudAuthException(kind == 'gmail'
+          ? 'No user found with this Gmail.'
+          : kind == 'phone'
+              ? 'No user found with this phone number.'
+              : 'No user found with this username.');
+    }
     await _db.collection('invites').doc('$familyId|$key').set({
       'familyId': familyId,
       'familyName': familyName,

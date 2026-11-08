@@ -187,6 +187,14 @@ class CloudAuth {
         if (snap.exists && snap.data()?['uid'] == user.uid) await ref.delete();
       } catch (_) {}
     }
+    // Frees the username and Gmail address for others to use.
+    try {
+      final profile = await _db.collection('personal').doc(user.uid).collection('profile').doc('info').get();
+      final uname = (profile.data()?['username'] as String?) ?? '';
+      if (uname.isNotEmpty) await _releaseIndex('usernames', uname, user.uid);
+      final gmail = linkedGmail();
+      if (gmail != null) await _releaseIndex('gmails', gmail.toLowerCase(), user.uid);
+    } catch (_) {}
     try {
       await user.delete();
     } on FirebaseAuthException catch (e) {
@@ -241,6 +249,32 @@ class CloudAuth {
       }
       throw CloudAuthException('Could not add the username: ${e.code}');
     }
+  }
+
+  /// Makes this username or Gmail address belong to the signed-in account in the cloud,
+  /// so other people can find it. Fails if another account already has it.
+  static Future<void> claimIndex(String collection, String id) async {
+    final user = _auth.currentUser;
+    if (user == null || id.isEmpty) return;
+    await _db.collection(collection).doc(id).set({'uid': user.uid});
+  }
+
+  /// True if another account has this username in the cloud.
+  static Future<bool> usernameTakenByOther(String username) async {
+    final snap = await _db.collection('usernames').doc(username.toLowerCase()).get();
+    return snap.exists && snap.data()?['uid'] != _auth.currentUser?.uid;
+  }
+
+  /// True if a cloud account exists for this username, Gmail address or phone number.
+  static Future<bool> accountExists(String collection, String id) async {
+    final snap = await _db.collection(collection).doc(id).get();
+    return snap.exists;
+  }
+
+  static Future<void> _releaseIndex(String collection, String id, String uid) async {
+    final ref = _db.collection(collection).doc(id);
+    final snap = await ref.get();
+    if (snap.exists && snap.data()?['uid'] == uid) await ref.delete();
   }
 
   static Future<void> signOut() async {

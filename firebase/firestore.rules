@@ -117,6 +117,20 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
+    // Usernames and Gmail addresses: each belongs to one account. Used to check that a person exists.
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow update: if signedIn() && resource.data.uid == me() && request.resource.data.uid == me();
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+    match /gmails/{addr} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow update: if signedIn() && resource.data.uid == me() && request.resource.data.uid == me();
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
     // Each account's own data, and its profile (username, phone, Gmail) used to match requests.
     match /personal/{uid}/{document=**} {
       allow read, write: if signedIn() && me() == uid;
