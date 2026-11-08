@@ -94,8 +94,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
         ],
       ),
     );
+    // Not disposed here: the dialog is still closing and its text field still uses it.
     final text = c.text.trim();
-    c.dispose();
     return ok == true && text.isNotEmpty ? text : null;
   }
 
@@ -156,8 +156,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
         ),
       ),
     );
+    // Not disposed here: the dialog is still closing and its text field still uses it.
     final value = c.text.trim();
-    c.dispose();
     if (ok != true) return;
     await _run(() => CloudFamily.addMember(
           familyId: g.id,

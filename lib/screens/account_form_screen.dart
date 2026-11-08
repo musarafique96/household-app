@@ -425,9 +425,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
     );
     final username = u.text.trim().toLowerCase();
     final pwd = p.text;
-    u.dispose();
-    p.dispose();
-    c.dispose();
+    // Controllers are not disposed here: the dialog is still closing and still uses them.
     if (ok != true) return;
 
     setState(() => _saving = true);
