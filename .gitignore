@@ -7,3 +7,4 @@ build/
 .flutter-plugins-dependencies
 .packages
 server/deploy/secrets/
+server/deploy/.env

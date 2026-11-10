@@ -10,11 +10,29 @@ services:
       - db_password
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Runs the SQL files once, on first start of an empty database volume.
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gharbaar -d gharbaar"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  api:
+    build: ../api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      Db__Host: postgres
+      Db__Name: gharbaar
+      Db__User: gharbaar
+      Db__PasswordFile: /run/secrets/db_password
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY in server/deploy/.env}
+      Jwt__Issuer: gharbaar
+    secrets:
+      - db_password
 
   caddy:
     image: caddy:2
