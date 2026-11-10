@@ -1,0 +1,3 @@
+gharbaar.duckdns.org {
+    respond "Gharbaar server is running" 200
+}
