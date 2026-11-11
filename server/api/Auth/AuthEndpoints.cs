@@ -79,7 +79,7 @@ public static partial class AuthEndpoints
         Guid userId;
         {
             await using var cmd = db.CreateCommand(
-                "select id, password_hash from users where username = $1 or lower(email) = $1 or phone = $1 limit 1");
+                "select id, password_hash from users where username = $1 or lower(email) = $1 limit 1");
             cmd.Parameters.AddWithValue(login);
 
             await using var reader = await cmd.ExecuteReaderAsync();
