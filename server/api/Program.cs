@@ -13,6 +13,9 @@ builder.Services.AddSingleton(new JwtOptions(
     jwtKey,
     builder.Configuration["Jwt:Issuer"] ?? "gharbaar",
     TimeSpan.FromMinutes(15)));
+builder.Services.AddSingleton(new GoogleOptions(
+    builder.Configuration["Google:ClientId"]
+    ?? throw new InvalidOperationException("Google:ClientId is not set (environment variable Google__ClientId).")));
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<PasswordService>();
 

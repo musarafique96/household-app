@@ -31,6 +31,7 @@ services:
       Db__PasswordFile: /run/secrets/db_password
       Jwt__Key: ${JWT_KEY:?set JWT_KEY in server/deploy/.env}
       Jwt__Issuer: gharbaar
+      Google__ClientId: 360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com
     secrets:
       - db_password
 

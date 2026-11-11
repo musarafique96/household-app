@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Google.Apis.Auth;
 using Npgsql;
 
 namespace Gharbaar.Api.Auth;
@@ -19,6 +20,7 @@ public static partial class AuthEndpoints
         auth.MapPost("/signin", SignIn);
         auth.MapPost("/refresh", Refresh);
         auth.MapPost("/signout", SignOut);
+        auth.MapPost("/google", GoogleSignIn);
     }
 
     private static async Task<IResult> SignUp(
@@ -193,6 +195,92 @@ public static partial class AuthEndpoints
         await cmd.ExecuteNonQueryAsync();
 
         return raw;
+    }
+
+    // Gmail sign-in: the phone sends a Google ID token. We check it was issued by Google for this app,
+    // then find the user by that verified email, or create the user the first time.
+    private static async Task<IResult> GoogleSignIn(
+        GoogleSignInRequest req, NpgsqlDataSource db, TokenService tokens, GoogleOptions google)
+    {
+        var invalid = Results.Json(
+            new { error = "Google sign-in failed. Please try again." },
+            statusCode: StatusCodes.Status401Unauthorized);
+
+        if (string.IsNullOrEmpty(req.IdToken))
+            return invalid;
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            payload = await GoogleJsonWebSignature.ValidateAsync(
+                req.IdToken,
+                new GoogleJsonWebSignature.ValidationSettings { Audience = new[] { google.ClientId } });
+        }
+        catch (InvalidJwtException)
+        {
+            return invalid;
+        }
+
+        if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
+            return invalid;
+
+        var email = payload.Email.Trim().ToLowerInvariant();
+        var userId = await FindUserIdByEmail(db, email);
+        if (userId is null)
+        {
+            try
+            {
+                userId = await CreateGoogleUser(db, email, payload.Name);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                // The same person signed in twice at the same moment. Use the account that now exists.
+                userId = await FindUserIdByEmail(db, email);
+            }
+        }
+
+        if (userId is null)
+            return invalid;
+
+        await using var conn = await db.OpenConnectionAsync();
+        var refreshToken = await InsertRefreshToken(conn, null, userId.Value, null);
+        return TokenResponse(tokens, userId.Value, refreshToken);
+    }
+
+    private static async Task<Guid?> FindUserIdByEmail(NpgsqlDataSource db, string email)
+    {
+        await using var cmd = db.CreateCommand("select id from users where lower(email) = $1");
+        cmd.Parameters.AddWithValue(email);
+        var result = await cmd.ExecuteScalarAsync();
+        return result is Guid id ? id : null;
+    }
+
+    private static async Task<Guid> CreateGoogleUser(NpgsqlDataSource db, string email, string? name)
+    {
+        var userId = Guid.NewGuid();
+        var displayName = string.IsNullOrWhiteSpace(name) ? email.Split('@')[0] : name.Trim();
+
+        await using var conn = await db.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        await using (var insertUser = new NpgsqlCommand(
+            "insert into users (id, email) values ($1, $2)", conn, tx))
+        {
+            insertUser.Parameters.AddWithValue(userId);
+            insertUser.Parameters.AddWithValue(email);
+            await insertUser.ExecuteNonQueryAsync();
+        }
+
+        await using (var insertProfile = new NpgsqlCommand(
+            "insert into user_profiles (user_id, display_name) values ($1, $2)", conn, tx))
+        {
+            insertProfile.Parameters.AddWithValue(userId);
+            insertProfile.Parameters.AddWithValue(displayName);
+            await insertProfile.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
+        return userId;
     }
 
     private static IResult TokenResponse(TokenService tokens, Guid userId, string refreshToken) =>
