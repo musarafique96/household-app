@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    networks: [internal]
     environment:
       POSTGRES_DB: gharbaar
       POSTGRES_USER: gharbaar
@@ -35,6 +36,7 @@ services:
       - ${INFRA_DIR:-../../../server-infra}/migrate:/infra:ro
     command: ["sh", "-c", "export PGPASSWORD=$$(cat /run/secrets/db_password) && sh /infra/migrate.sh"]
     restart: "no"
+    networks: [internal]
 
   # Creates or updates the API's login role with only the rights it needs. Runs after migrations, then exits.
   login-role:
@@ -53,6 +55,7 @@ services:
       - ./create_login_role.sql:/create_login_role.sql:ro
     command: ["sh", "-c", "export PGPASSWORD=$$(cat /run/secrets/db_password) && psql -v ON_ERROR_STOP=1 -v pw=\"$$(cat /run/secrets/db_login_password)\" -q -f /create_login_role.sql"]
     restart: "no"
+    networks: [internal]
 
   api:
     build: ../api
@@ -76,7 +79,7 @@ services:
     secrets:
       - db_login_password
     networks:
-      default: {}
+      internal: {}
       edge:
         aliases: [gharbaar-api]
 
@@ -91,5 +94,6 @@ volumes:
 
 # Caddy and public routing live in server-infra. This network is created there.
 networks:
+  internal:
   edge:
     external: true
