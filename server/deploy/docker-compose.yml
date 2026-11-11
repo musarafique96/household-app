@@ -34,17 +34,10 @@ services:
       Google__ClientId: 360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com
     secrets:
       - db_password
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+    networks:
+      default: {}
+      edge:
+        aliases: [gharbaar-api]
 
 secrets:
   db_password:
@@ -52,5 +45,8 @@ secrets:
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
+
+# Caddy and public routing live in server-infra. This network is created there.
+networks:
+  edge:
+    external: true
