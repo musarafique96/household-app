@@ -10,13 +10,49 @@ services:
       - db_password
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Runs the SQL files once, on first start of an empty database volume.
-      - ../db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gharbaar -d gharbaar"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Applies new migration files once, using the shared runner in server-infra. Exits when done.
+  migrate:
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: gharbaar
+      PGUSER: gharbaar
+      # Marks 001_init.sql as applied on the existing database. Has no effect once it's recorded.
+      BASELINE_FILE: 001_init.sql
+    secrets:
+      - db_password
+    volumes:
+      - ../db/migrations:/migrations:ro
+      - ${INFRA_DIR:-../../../server-infra}/migrate:/infra:ro
+    command: ["sh", "-c", "export PGPASSWORD=$$(cat /run/secrets/db_password) && sh /infra/migrate.sh"]
+    restart: "no"
+
+  # Creates or updates the API's login role with only the rights it needs. Runs after migrations, then exits.
+  login-role:
+    image: postgres:16
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: postgres
+      PGDATABASE: gharbaar
+      PGUSER: gharbaar
+    secrets:
+      - db_password
+      - db_login_password
+    volumes:
+      - ./create_login_role.sql:/create_login_role.sql:ro
+    command: ["sh", "-c", "export PGPASSWORD=$$(cat /run/secrets/db_password) && psql -v ON_ERROR_STOP=1 -v pw=\"$$(cat /run/secrets/db_login_password)\" -q -f /create_login_role.sql"]
+    restart: "no"
 
   api:
     build: ../api
@@ -24,18 +60,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      login-role:
+        condition: service_completed_successfully
     environment:
       Db__Host: postgres
       Db__Name: gharbaar
-      Db__User: gharbaar
-      Db__PasswordFile: /run/secrets/db_password
+      # The API connects as its own limited login role, not the database owner.
+      Db__User: gharbaar_login
+      Db__PasswordFile: /run/secrets/db_login_password
       Jwt__Key: ${JWT_KEY:?set JWT_KEY in server/deploy/.env}
       Jwt__Issuer: gharbaar
       Google__ClientId: 360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com
       # Caddy's fixed address on the shared edge network (set in server-infra). Only it may set the client address.
       TrustedProxies__0: 172.30.0.2
     secrets:
-      - db_password
+      - db_login_password
     networks:
       default: {}
       edge:
@@ -44,6 +83,8 @@ services:
 secrets:
   db_password:
     file: ./secrets/db_password.txt
+  db_login_password:
+    file: ./secrets/db_login_password.txt
 
 volumes:
   pgdata:
