@@ -23,6 +23,19 @@ public sealed class TokenService(JwtOptions options)
     }
 }
 
+// Refresh tokens are random strings given to the app once. Only their SHA-256 hash is stored.
+public static class RefreshTokens
+{
+    public static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
+
+    public static string NewToken() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+    public static string Hash(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+}
+
 // Passwords are stored as "pbkdf2-sha256$iterations$salt$hash" using the built-in .NET PBKDF2.
 public sealed class PasswordService
 {
