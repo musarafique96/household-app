@@ -32,6 +32,8 @@ services:
       Jwt__Key: ${JWT_KEY:?set JWT_KEY in server/deploy/.env}
       Jwt__Issuer: gharbaar
       Google__ClientId: 360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com
+      # Caddy's fixed address on the shared edge network (set in server-infra). Only it may set the client address.
+      TrustedProxies__0: 172.30.0.2
     secrets:
       - db_password
     networks:

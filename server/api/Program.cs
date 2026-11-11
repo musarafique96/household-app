@@ -1,4 +1,6 @@
+using System.Net;
 using Gharbaar.Api.Auth;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,8 +21,23 @@ builder.Services.AddSingleton(new GoogleOptions(
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<PasswordService>();
 
+// Caddy is the only proxy in front of this API. The client address is read from X-Forwarded-For
+// only when the request comes from a trusted proxy (TrustedProxies__0 is set to Caddy's address).
+var trustedProxies = builder.Configuration.GetSection("TrustedProxies").Get<string[]>()
+    ?? new[] { "127.0.0.1", "::1" };
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownProxies.Clear();
+    foreach (var proxy in trustedProxies)
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
+});
+
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapAuthEndpoints();
 
