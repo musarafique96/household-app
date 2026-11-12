@@ -1,3 +1,6 @@
+# Gharbaar stack for one server. Run from server/deploy.
+name: gharbaar
+
 services:
   postgres:
     image: postgres:16
