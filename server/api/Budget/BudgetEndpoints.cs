@@ -8,6 +8,7 @@ namespace Gharbaar.Api.Budget;
 
 public sealed record CategoryRequest(string? Name, decimal? MonthlyLimit, int? Version);
 public sealed record ExpenseRequest(Guid? CategoryId, decimal? Amount, string? ExpenseDate, string? Note, int? Version);
+public sealed record ResolveRequest(string? Keep);
 public sealed record SyncItem(string? Entity, Guid? EntityId, string? Operation, int? BaseVersion, JsonElement? Data);
 
 // Budget categories and expenses for a household.
@@ -479,21 +480,96 @@ public static class BudgetEndpoints
         return Results.Ok(list);
     }
 
-    // Marks a conflict as reviewed. The person then re-enters the change if they want it kept.
+    // The person picks which version to keep: "mine" (the phone's change) or "server" (the change already saved).
+    // "mine" is written as a new version, so every phone receives it through the change feed.
     private static async Task<IResult> ResolveConflict(
-        Guid householdId, Guid id, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+        Guid householdId, Guid id, ResolveRequest req, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
     {
-        var (_, error) = await Authorize(http, jwt, db, householdId, edit: true);
+        var (me, error) = await Authorize(http, jwt, db, householdId, edit: true);
         if (error is not null) return error;
 
-        await using var conn = await db.OpenConnectionAsync();
-        await using var cmd = new NpgsqlCommand(
-            "update sync_conflicts set status = 'resolved' where id = $1 and household_id = $2 and status = 'open'", conn);
-        cmd.Parameters.AddWithValue(id);
-        cmd.Parameters.AddWithValue(householdId);
-        var rows = await cmd.ExecuteNonQueryAsync();
+        var keep = (req.Keep ?? "").Trim().ToLowerInvariant();
+        if (keep is not ("mine" or "server"))
+            return Results.BadRequest(new { error = "Choose keep: \"mine\" or \"server\"." });
 
-        return rows == 0 ? Results.NotFound() : Results.Ok(new { id, status = "resolved" });
+        await using var conn = await db.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        string entity;
+        Guid entityId;
+        string clientData;
+        await using (var find = new NpgsqlCommand(
+            "select entity, entity_id, client_data::text from sync_conflicts where id = $1 and household_id = $2 and status = 'open' for update",
+            conn, tx))
+        {
+            find.Parameters.AddWithValue(id);
+            find.Parameters.AddWithValue(householdId);
+            await using var reader = await find.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return Results.NotFound();
+            entity = reader.GetString(0);
+            entityId = reader.GetGuid(1);
+            clientData = reader.GetString(2);
+        }
+
+        if (keep == "mine" &&
+            !await ApplyClientVersion(conn, tx, householdId, me!.Value, entity, entityId, clientData))
+        {
+            return Results.Conflict(new { error = "That item no longer exists, or the saved values are not valid. Enter it again." });
+        }
+
+        await Sql.Exec(conn, tx, "update sync_conflicts set status = 'resolved' where id = $1", id);
+        await tx.CommitAsync();
+
+        return Results.Ok(new { id, status = "resolved", kept = keep });
+    }
+
+    // Writes the phone's values over the current row as a new version. Also restores the row if it was deleted.
+    private static async Task<bool> ApplyClientVersion(
+        NpgsqlConnection conn, NpgsqlTransaction tx, Guid householdId, Guid actor,
+        string entity, Guid id, string clientData)
+    {
+        using var doc = JsonDocument.Parse(clientData);
+        var data = doc.RootElement;
+
+        if (entity == "budget_category")
+        {
+            if (!ValidCategory(Str(data, "name"), Dec(data, "monthlyLimit"), out var name, out var limit))
+                return false;
+
+            var version = await Sql.Scalar(conn, tx,
+                @"update budget_categories set name = $1, monthly_limit = $2, deleted_at = null, version = version + 1, updated_at = now()
+                  where id = $3 and household_id = $4 returning version", name, limit, id, householdId);
+            if (version is null)
+                return false;
+
+            await Sql.LogChange(conn, tx, householdId, entity, id, "update",
+                CategoryPayload(id, Convert.ToInt32(version), name, limit), actor);
+            return true;
+        }
+
+        if (entity == "expense")
+        {
+            var categoryId = ParseGuid(Str(data, "categoryId"));
+            if (!ValidExpense(Dec(data, "amount"), Str(data, "expenseDate"), out var amount, out var date))
+                return false;
+            var note = Clean(Str(data, "note"));
+            if (!await CategoryExists(conn, tx, householdId, categoryId))
+                return false;
+
+            var version = await Sql.Scalar(conn, tx,
+                @"update expenses set category_id = $1, amount = $2, expense_date = $3, note = $4, deleted_at = null,
+                  version = version + 1, updated_at = now()
+                  where id = $5 and household_id = $6 returning version", categoryId, amount, date, note, id, householdId);
+            if (version is null)
+                return false;
+
+            await Sql.LogChange(conn, tx, householdId, entity, id, "update",
+                ExpensePayload(id, Convert.ToInt32(version), categoryId, amount, date, note), actor);
+            return true;
+        }
+
+        return false;
     }
 
     // ---- Shared helpers ----
