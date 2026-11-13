@@ -60,6 +60,9 @@ class CloudFamily {
   static String _key(String targetType, String value) =>
       targetType == 'gmail' ? 'gmail:$value' : 'user:$value';
 
+  /// Kept so the account screens compile. The API keeps the username itself, so nothing needs saving here.
+  static Future<void> saveProfile({required String username, required String phone}) async {}
+
   /// Groups the signed-in person is in. The admin of a group is its head on the API.
   static Future<List<FamilyInfo>> myFamilies() async {
     if (_me == null) return [];

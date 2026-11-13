@@ -100,7 +100,7 @@ class CloudAuth {
   }
 
   /// Disables the cloud login and leaves every household. The username stays reserved and the history is kept.
-  static Future<void> deleteAccount({required String password}) async {
+  static Future<void> deleteAccount({required String password, String phone = ''}) async {
     try {
       await ApiClient.post('/me/delete', {'password': password});
     } on ApiException catch (e) {
@@ -115,4 +115,25 @@ class CloudAuth {
     await ApiClient.endSession();
     _current = null;
   }
+
+  // ---- Paused until the API supports them ----
+  // These keep the existing screens compiling. Gmail, phone, and Google sign-in come back in later phases.
+
+  static const String _later = 'This comes later, when the API supports it.';
+
+  /// The Gmail address linked to the account. Always null until Gmail sign-in is on the API.
+  static String? linkedGmail() => null;
+
+  /// Usernames are checked by the server when the account is created, so there is no separate check.
+  static Future<bool> usernameTakenByOther(String username) async => false;
+
+  /// Phone numbers stay on this phone until phone sign-in is on the API.
+  static Future<void> setPhone(String phone, {String? oldPhone}) async {}
+
+  static Future<void> linkGmail() async => throw CloudAuthException(_later);
+
+  static Future<void> addUsername(String username, String password) async =>
+      throw CloudAuthException(_later);
+
+  static Future<CloudUser?> signInWithGoogle() async => throw CloudAuthException(_later);
 }
