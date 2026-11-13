@@ -1,5 +1,8 @@
 using System.Net;
 using Gharbaar.Api.Auth;
+using Gharbaar.Api.Budget;
+using Gharbaar.Api.Households;
+using Gharbaar.Api.Mail;
 using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
@@ -21,6 +24,15 @@ builder.Services.AddSingleton(new GoogleOptions(
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<PasswordService>();
 
+// Email is optional. With no Smtp:Host or Smtp:From, invites are still created and no email is sent.
+builder.Services.AddSingleton(new SmtpOptions(
+    builder.Configuration["Smtp:Host"],
+    int.TryParse(builder.Configuration["Smtp:Port"], out var smtpPort) ? smtpPort : 587,
+    builder.Configuration["Smtp:User"],
+    builder.Configuration["Smtp:PasswordFile"],
+    builder.Configuration["Smtp:From"]));
+builder.Services.AddSingleton<Mailer>();
+
 // Caddy is the only proxy in front of this API. The client address is read from X-Forwarded-For
 // only when the request comes from a trusted proxy (TrustedProxies__0 is set to Caddy's address).
 var trustedProxies = builder.Configuration.GetSection("TrustedProxies").Get<string[]>()
@@ -40,6 +52,8 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapAuthEndpoints();
+app.MapHouseholdEndpoints();
+app.MapBudgetEndpoints();
 
 app.Run();
 

@@ -80,8 +80,15 @@ services:
       Google__ClientId: 360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com
       # Caddy's fixed address on the shared edge network (set in server-infra). Only it may set the client address.
       TrustedProxies__0: 172.30.0.2
+      # Email for invites. Leave SMTP_HOST and SMTP_FROM empty to skip email. The password comes from a secret file.
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__From: ${SMTP_FROM:-}
+      Smtp__PasswordFile: /run/secrets/smtp_password
     secrets:
       - db_login_password
+      - smtp_password
     networks:
       internal: {}
       edge:
@@ -92,6 +99,8 @@ secrets:
     file: ./secrets/db_password.txt
   db_login_password:
     file: ./secrets/db_login_password.txt
+  smtp_password:
+    file: ./secrets/smtp_password.txt
 
 volumes:
   pgdata:
