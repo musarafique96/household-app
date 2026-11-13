@@ -1,6 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
+import 'api_client.dart';
 import 'cloud_auth.dart';
 
 /// A group the signed-in person belongs to.
@@ -44,98 +42,59 @@ class FamilyInvite {
   bool get isPending => status == 'pending';
 }
 
-/// Groups, members and requests in the cloud.
+/// Groups (called households on the API), members and requests.
 class CloudFamily {
   CloudFamily._();
 
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static CloudUser? get _me => CloudAuth.currentUser;
 
-  static User? get _me => CloudAuth.currentUser;
-
-  /// Saves the details other people can use to find this account. Call after sign-in and profile saves.
-  static Future<void> saveProfile({required String username, required String phone}) async {
-    final user = _me;
-    if (user == null) return;
-    await _db.collection('personal').doc(user.uid).collection('profile').doc('info').set({
-      'username': username.toLowerCase(),
-      'phone': phone.isEmpty ? '' : CloudAuth.normalizePhone(phone),
-      'email': user.email ?? '',
-    }, SetOptions(merge: true));
-    // Make the username and Gmail findable in the cloud (fails quietly if another account has them).
+  /// Runs an API call and turns the server's error into a message for the person.
+  static Future<dynamic> _call(Future<dynamic> Function() action) async {
     try {
-      await CloudAuth.claimIndex('usernames', username.toLowerCase());
-    } catch (_) {}
-    final gmail = CloudAuth.linkedGmail();
-    if (gmail != null) {
-      try {
-        await CloudAuth.claimIndex('gmails', gmail.toLowerCase());
-      } catch (_) {}
+      return await action();
+    } on ApiException catch (e) {
+      throw CloudAuthException(e.message);
     }
   }
 
-  /// Target for a request: 'gmail:<address>', 'phone:<number>' or 'user:<username>'.
-  static String targetKey(String kind, String value) {
-    switch (kind) {
-      case 'gmail':
-        return 'gmail:${value.trim().toLowerCase()}';
-      case 'phone':
-        return 'phone:${CloudAuth.normalizePhone(value)}';
-      default:
-        return 'user:${value.trim().toLowerCase()}';
-    }
-  }
+  static String _key(String targetType, String value) =>
+      targetType == 'gmail' ? 'gmail:$value' : 'user:$value';
 
-  /// Records that this person is in a group. Listed by uid, so the app can show their groups.
-  static Future<void> _recordMembership(String familyId, String uid) =>
-      _db.collection('memberships').doc('${familyId}_$uid').set({'uid': uid, 'familyId': familyId});
-
-  /// Groups the signed-in person is in (created by them, or joined).
+  /// Groups the signed-in person is in. The admin of a group is its head on the API.
   static Future<List<FamilyInfo>> myFamilies() async {
-    final user = _me;
-    if (user == null) return [];
-    final memberships = await _db.collection('memberships').where('uid', isEqualTo: user.uid).get();
-    final result = <FamilyInfo>[];
-    for (final m in memberships.docs) {
-      final fid = m.data()['familyId'] as String?;
-      if (fid == null) continue;
-      final family = _db.collection('families').doc(fid);
-      final doc = await family.get();
-      final member = await family.collection('members').doc(user.uid).get();
-      // Skip groups the person has since left or been removed from.
-      if (!doc.exists || !member.exists) continue;
-      result.add(FamilyInfo(
-        fid,
-        (doc.data()?['name'] as String?) ?? 'Group',
-        (member.data()?['role'] as String?) == 'admin',
-      ));
-    }
-    return result;
+    if (_me == null) return [];
+    final list = await _call(() => ApiClient.get('/households')) as List<dynamic>;
+    return list.map((raw) {
+      final h = raw as Map<String, dynamic>;
+      return FamilyInfo(h['id'] as String, (h['name'] as String?) ?? 'Group', h['role'] == 'head');
+    }).toList();
   }
 
-  /// Creates a group, and makes the signed-in person its admin.
+  /// Creates a group, and makes the signed-in person its admin. Returns the new group's id.
   static Future<String> createFamily(String name, String myName) async {
-    final user = _me;
-    if (user == null) throw CloudAuthException('Sign in first.');
-    final family = _db.collection('families').doc();
-    await family.set({'name': name, 'createdBy': user.uid});
-    await family.collection('members').doc(user.uid).set({'role': 'admin', 'name': myName});
-    await _recordMembership(family.id, user.uid);
-    return family.id;
+    if (_me == null) throw CloudAuthException('Sign in first.');
+    final data = await _call(() => ApiClient.post('/households', {'name': name})) as Map<String, dynamic>;
+    return data['id'] as String;
   }
 
   static Future<void> renameFamily(String familyId, String name) async {
-    await _db.collection('families').doc(familyId).update({'name': name});
+    await _call(() => ApiClient.put('/households/$familyId', {'name': name}));
   }
 
   static Future<List<FamilyMember>> members(String familyId) async {
-    final snap = await _db.collection('families').doc(familyId).collection('members').get();
-    return snap.docs
-        .map((d) => FamilyMember(d.id, (d.data()['name'] as String?) ?? 'Member',
-            (d.data()['role'] as String?) ?? 'member'))
-        .toList();
+    final list = await _call(() => ApiClient.get('/households/$familyId/members')) as List<dynamic>;
+    return list.map((raw) {
+      final m = raw as Map<String, dynamic>;
+      final name = (m['displayName'] as String?) ?? '';
+      return FamilyMember(
+        m['userId'] as String,
+        name.isEmpty ? 'Member' : name,
+        m['role'] == 'head' ? 'admin' : 'member',
+      );
+    }).toList();
   }
 
-  /// Sends a request to join a group. Any member of the group can do this.
+  /// Sends a request to join a group. Only usernames work for now. Gmail and phone invites come later.
   static Future<void> addMember({
     required String familyId,
     required String familyName,
@@ -143,99 +102,80 @@ class CloudFamily {
     required String kind,
     required String value,
   }) async {
-    final user = _me;
-    if (user == null) throw CloudAuthException('Sign in first.');
-    final key = targetKey(kind, value);
-    if (key.endsWith(':')) throw CloudAuthException('Enter a Gmail, phone number or username.');
-    // The person must already have a cloud account.
-    final id = kind == 'phone' ? CloudAuth.normalizePhone(value) : value.trim().toLowerCase();
-    final collection = kind == 'gmail' ? 'gmails' : kind == 'phone' ? 'phones' : 'usernames';
-    if (!await CloudAuth.accountExists(collection, id)) {
-      throw CloudAuthException(kind == 'gmail'
-          ? 'No user found with this Gmail.'
-          : kind == 'phone'
-              ? 'No user found with this phone number.'
-              : 'No user found with this username.');
+    if (_me == null) throw CloudAuthException('Sign in first.');
+    if (kind != 'user') {
+      throw CloudAuthException('Only usernames can be invited for now. Gmail and phone invites come later.');
     }
-    await _db.collection('invites').doc('$familyId|$key').set({
-      'familyId': familyId,
-      'familyName': familyName,
-      'invitedBy': user.uid,
-      'invitedByName': myName,
-      'targetKey': key,
-      'status': 'pending',
-      'createdAt': DateTime.now().toIso8601String(),
-    });
+    final username = value.trim().toLowerCase();
+    if (username.isEmpty) throw CloudAuthException('Enter a username.');
+    await _call(() => ApiClient.post('/households/$familyId/invites', {
+          'targetType': 'username',
+          'targetValue': username,
+        }));
   }
 
-  /// Requests the signed-in person sent.
+  /// Requests sent from the groups the person administers.
   static Future<List<FamilyInvite>> sentInvites() async {
-    final user = _me;
-    if (user == null) return [];
-    final snap = await _db.collection('invites').where('invitedBy', isEqualTo: user.uid).get();
-    return snap.docs.map(_fromDoc).toList();
-  }
-
-  /// Requests sent to the signed-in person, by Gmail, phone number or username.
-  static Future<List<FamilyInvite>> receivedInvites() async {
-    final user = _me;
-    if (user == null) return [];
-    final keys = <String>[];
-    if (user.email != null) keys.add(targetKey('gmail', user.email!));
-    final profile = await _db.collection('personal').doc(user.uid).collection('profile').doc('info').get();
-    final username = (profile.data()?['username'] as String?) ?? '';
-    final phone = (profile.data()?['phone'] as String?) ?? '';
-    if (username.isNotEmpty) keys.add(targetKey('user', username));
-    if (phone.isNotEmpty) keys.add(targetKey('phone', phone));
-
+    final me = _me;
+    if (me == null) return [];
     final result = <FamilyInvite>[];
-    for (final key in keys) {
-      try {
-        final snap = await _db.collection('invites').where('targetKey', isEqualTo: key).get();
-        result.addAll(snap.docs.map(_fromDoc));
-      } catch (_) {}
+    for (final group in await myFamilies()) {
+      if (!group.isAdmin) continue;
+      final list = await _call(() => ApiClient.get('/households/${group.id}/invites')) as List<dynamic>;
+      for (final raw in list) {
+        final i = raw as Map<String, dynamic>;
+        result.add(FamilyInvite(
+          id: i['id'] as String,
+          familyId: group.id,
+          familyName: group.name,
+          invitedBy: me.uid,
+          invitedByName: me.displayName.isEmpty ? me.username : me.displayName,
+          targetKey: _key(i['targetType'] as String, i['targetValue'] as String),
+          status: i['status'] as String,
+        ));
+      }
     }
     return result;
   }
 
-  static FamilyInvite _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
-    final data = d.data();
-    return FamilyInvite(
-      id: d.id,
-      familyId: (data['familyId'] as String?) ?? '',
-      familyName: (data['familyName'] as String?) ?? 'Group',
-      invitedBy: (data['invitedBy'] as String?) ?? '',
-      invitedByName: (data['invitedByName'] as String?) ?? 'Someone',
-      targetKey: (data['targetKey'] as String?) ?? '',
-      status: (data['status'] as String?) ?? 'pending',
-    );
+  /// Requests sent to the signed-in person by username.
+  static Future<List<FamilyInvite>> receivedInvites() async {
+    if (_me == null) return [];
+    final list = await _call(() => ApiClient.get('/invites/mine')) as List<dynamic>;
+    return list.map((raw) {
+      final i = raw as Map<String, dynamic>;
+      final inviter = (i['invitedByName'] as String?) ?? '';
+      return FamilyInvite(
+        id: i['id'] as String,
+        familyId: i['householdId'] as String,
+        familyName: (i['householdName'] as String?) ?? 'Group',
+        invitedBy: '',
+        invitedByName: inviter.isEmpty ? 'Someone' : inviter,
+        targetKey: _key(i['targetType'] as String, i['targetValue'] as String),
+        status: 'pending',
+      );
+    }).toList();
   }
 
-  /// Accepts a request: joins the group, then marks the request approved.
+  /// Accepts a request. The person joins the group as a member.
   static Future<void> acceptInvite(FamilyInvite invite, String myName) async {
-    final user = _me;
-    if (user == null) throw CloudAuthException('Sign in first.');
-    await _db.collection('families').doc(invite.familyId).collection('members').doc(user.uid).set({
-      'role': 'member',
-      'name': myName,
-    });
-    await _recordMembership(invite.familyId, user.uid);
-    await _db.collection('invites').doc(invite.id).update({'status': 'approved'});
+    if (_me == null) throw CloudAuthException('Sign in first.');
+    await _call(() => ApiClient.post('/invites/${invite.id}/accept'));
   }
 
   static Future<void> rejectInvite(FamilyInvite invite) async {
-    await _db.collection('invites').doc(invite.id).update({'status': 'rejected'});
+    await _call(() => ApiClient.post('/invites/${invite.id}/reject'));
   }
 
-  /// Admins remove a member.
+  /// Admins remove a member, and a member can remove themselves by leaving.
   static Future<void> removeMember(String familyId, String uid) async {
-    await _db.collection('families').doc(familyId).collection('members').doc(uid).delete();
+    await _call(() => ApiClient.delete('/households/$familyId/members/$uid'));
   }
 
   /// Leaves a group.
   static Future<void> leaveFamily(String familyId) async {
-    final user = _me;
-    if (user == null) return;
-    await removeMember(familyId, user.uid);
+    final me = _me;
+    if (me == null) return;
+    await removeMember(familyId, me.uid);
   }
 }
