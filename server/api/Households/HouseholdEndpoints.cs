@@ -23,6 +23,7 @@ public static class HouseholdEndpoints
         households.MapPost("/{householdId:guid}/invites", Invite);
         households.MapPut("/{householdId:guid}/members/{userId:guid}/permissions/{module}", GrantPermission);
         households.MapPut("/{householdId:guid}", RenameHousehold);
+        households.MapGet("/{householdId:guid}/invites", SentInvites);
         households.MapDelete("/{householdId:guid}/members/{userId:guid}", RemoveMember);
 
         var invites = app.MapGroup("/invites");
@@ -285,6 +286,35 @@ public static class HouseholdEndpoints
 
         var inviter = reader.GetString(1);
         return (reader.GetString(0), inviter.Length > 0 ? inviter : "Someone");
+    }
+
+    // Invites a head has sent to this household, newest first.
+    private static async Task<IResult> SentInvites(Guid householdId, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+    {
+        var me = CurrentUser.From(http, jwt);
+        if (me is null) return Results.Unauthorized();
+        if (await Access.RoleAsync(db, householdId, me.Value) != "head")
+            return Forbidden("Only a head can see sent invites.");
+
+        await using var cmd = db.CreateCommand(
+            @"select id, target_type, target_value, status, created_at
+              from invites where household_id = $1 order by created_at desc limit 200");
+        cmd.Parameters.AddWithValue(householdId);
+
+        var list = new List<object>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            list.Add(new
+            {
+                id = reader.GetGuid(0),
+                targetType = reader.GetString(1),
+                targetValue = reader.GetString(2),
+                status = reader.GetString(3),
+                createdAt = reader.GetDateTime(4),
+            });
+        }
+        return Results.Ok(list);
     }
 
     private static async Task<IResult> RenameHousehold(
