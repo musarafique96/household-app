@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../auth.dart';
 import '../cloud_auth.dart';
 import '../cloud_family.dart';
-import '../diagnostics.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../quick_login.dart';
@@ -226,52 +225,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (_) {}
 
     await _finishSignIn(c.user);
-  }
-
-  Future<void> _googleSignIn() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final cloud = await CloudAuth.signInWithGoogle();
-      if (!mounted) return;
-      if (cloud == null) {
-        setState(() => _busy = false);
-        return;
-      }
-      final all = await Db.instance.users();
-      AppUser? match;
-      for (final u in all) {
-        if (u.firebaseUid == cloud.uid) match = u;
-      }
-      match ??= await Db.instance.saveUser(AppUser(
-        id: 0,
-        name: cloud.displayName ?? cloud.email ?? 'Member',
-        currency: 'PKR',
-        email: cloud.email ?? '',
-      ));
-      if (match.firebaseUid.isEmpty) {
-        await Db.instance.setFirebaseUid(match.id, cloud.uid);
-      }
-      // The Gmail admin account gets the admin role.
-      await Db.instance.applyAdminEmail();
-      final fresh = (await Db.instance.users()).where((u) => u.id == match!.id);
-      if (fresh.isNotEmpty) match = fresh.first;
-      // Save the cloud profile in the background, so sign-in does not wait for the network.
-      CloudFamily.saveProfile(username: match.username, phone: match.phone).catchError((_) {});
-      await _finishSignIn(match);
-    } on CloudAuthException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (e) {
-      final key = await Diagnostics.appSigningKey();
-      await Diagnostics.saveNote('Google sign-in failed: $e | app signing key: $key');
-      if (mounted) {
-        setState(() => _error = 'Google sign-in did not work. $e\n\nThis app\'s signing key: $key');
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _setPasswordForExistingAccount(AppUser user) async {
@@ -525,20 +478,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                               const SizedBox(height: 22),
                               _SignInButton(busy: _busy, onTap: _signIn),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  side: const BorderSide(color: Colors.white70, width: 1.5),
-                                  minimumSize: const Size.fromHeight(56),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(18)),
-                                ),
-                                onPressed: _busy ? null : _googleSignIn,
-                                icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
-                                label: const Text('Continue with Google',
-                                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                              ),
                             ],
                           ),
                         ),

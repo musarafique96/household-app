@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../auth.dart';
@@ -181,7 +180,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
 
       // New username accounts also get a cloud account, so they can sync.
       if (widget.signUp && password.isNotEmpty) {
-        User? cloudUser;
+        CloudUser? cloudUser;
         try {
           cloudUser = await CloudAuth.signUp(username, password);
         } on CloudAuthException catch (e) {
@@ -190,14 +189,6 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         } catch (_) {}
         if (cloudUser != null) {
           cloudUid = cloudUser.uid;
-          if (phone.isNotEmpty) {
-            try {
-              await CloudAuth.setPhone(phone);
-            } catch (e) {
-              await cloudUser.delete();
-              rethrow;
-            }
-          }
         }
       } else if (_isSignedInUser && CloudAuth.currentUser != null &&
           phone.isNotEmpty && phone != (widget.user?.phone ?? '')) {
@@ -289,7 +280,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       return;
     }
     try {
-      User cloud;
+      CloudUser cloud;
       try {
         cloud = await CloudAuth.signUp(user.username, pwd);
       } on CloudAuthException catch (e) {

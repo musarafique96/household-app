@@ -135,5 +135,4 @@ class CloudAuth {
   static Future<void> addUsername(String username, String password) async =>
       throw CloudAuthException(_later);
 
-  static Future<CloudUser?> signInWithGoogle() async => throw CloudAuthException(_later);
 }
