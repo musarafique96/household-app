@@ -1,4 +1,5 @@
 using System.Net;
+using Gharbaar.Api.Account;
 using Gharbaar.Api.Auth;
 using Gharbaar.Api.Budget;
 using Gharbaar.Api.Households;
@@ -54,6 +55,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapAuthEndpoints();
 app.MapHouseholdEndpoints();
 app.MapBudgetEndpoints();
+app.MapAccountEndpoints();
 
 app.Run();
 

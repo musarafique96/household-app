@@ -8,6 +8,7 @@ namespace Gharbaar.Api.Households;
 public sealed record CreateHouseholdRequest(string? Name);
 public sealed record InviteRequest(string? TargetType, string? TargetValue);
 public sealed record GrantRequest(bool? CanView, bool? CanEdit);
+public sealed record RenameRequest(string? Name);
 
 public static class HouseholdEndpoints
 {
@@ -21,6 +22,8 @@ public static class HouseholdEndpoints
         households.MapGet("/{householdId:guid}/members", ListMembers);
         households.MapPost("/{householdId:guid}/invites", Invite);
         households.MapPut("/{householdId:guid}/members/{userId:guid}/permissions/{module}", GrantPermission);
+        households.MapPut("/{householdId:guid}", RenameHousehold);
+        households.MapDelete("/{householdId:guid}/members/{userId:guid}", RemoveMember);
 
         var invites = app.MapGroup("/invites");
         invites.MapGet("/mine", MyInvites);
@@ -282,6 +285,57 @@ public static class HouseholdEndpoints
 
         var inviter = reader.GetString(1);
         return (reader.GetString(0), inviter.Length > 0 ? inviter : "Someone");
+    }
+
+    private static async Task<IResult> RenameHousehold(
+        Guid householdId, RenameRequest req, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+    {
+        var me = CurrentUser.From(http, jwt);
+        if (me is null) return Results.Unauthorized();
+        if (await Access.RoleAsync(db, householdId, me.Value) != "head")
+            return Forbidden("Only a head can rename the household.");
+
+        var name = (req.Name ?? "").Trim();
+        if (name.Length is 0 or > 80)
+            return Results.BadRequest(new { error = "Household name must be 1-80 characters." });
+
+        await using var conn = await db.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+        await Sql.Exec(conn, tx, "update households set name = $2 where id = $1 and deleted_at is null", householdId, name);
+        await tx.CommitAsync();
+        return Results.Ok(new { id = householdId, name });
+    }
+
+    // A head removes someone, or any member removes themselves (leaving). The last head can't leave,
+    // because the database requires every household to keep one.
+    private static async Task<IResult> RemoveMember(
+        Guid householdId, Guid userId, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+    {
+        var me = CurrentUser.From(http, jwt);
+        if (me is null) return Results.Unauthorized();
+
+        var myRole = await Access.RoleAsync(db, householdId, me.Value);
+        if (myRole is null) return Results.NotFound();
+        if (userId != me.Value && myRole != "head")
+            return Forbidden("Only a head can remove other members.");
+        if (await Access.RoleAsync(db, householdId, userId) is null)
+            return Results.NotFound(new { error = "That person is not an active member." });
+
+        try
+        {
+            await using var conn = await db.OpenConnectionAsync();
+            await using var tx = await conn.BeginTransactionAsync();
+            await Sql.Exec(conn, tx,
+                "update household_members set left_at = now(), removed_by = $3 where household_id = $1 and user_id = $2 and left_at is null",
+                householdId, userId, me.Value);
+            await tx.CommitAsync();
+        }
+        catch (PostgresException ex) when (ex.MessageText.Contains("at least one head"))
+        {
+            return Results.Conflict(new { error = "Make someone else the head before you leave." });
+        }
+
+        return Results.NoContent();
     }
 
     private static IResult Forbidden(string message) =>
