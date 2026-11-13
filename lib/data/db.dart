@@ -10,7 +10,7 @@ import 'models.dart';
 
 /// Offline local database. A future online backend can replace this class
 /// while the screens keep calling the same methods.
-/// The one account that is the app admin (its Gmail, also its Firebase sign-in).
+/// The one account that is the app admin (its Gmail, also its cloud sign-in).
 const String kAdminEmail = 'rafique.musa96@gmail.com';
 
 class Db {
@@ -26,10 +26,10 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: (db, version) async {
         await db.execute(
-            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0, firebaseUid TEXT NOT NULL DEFAULT \'\')');
+            'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0, cloudUid TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
             'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
         await db.execute(
@@ -46,6 +46,10 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // The cloud account ID moved from Firebase to the API, so the column is renamed to match.
+        if (oldVersion < 11) {
+          await db.execute('ALTER TABLE users RENAME COLUMN firebaseUid TO cloudUid');
+        }
         if (oldVersion < 10) {
           await db.execute("ALTER TABLE users ADD COLUMN firebaseUid TEXT NOT NULL DEFAULT ''");
         }
@@ -152,10 +156,10 @@ class Db {
     );
   }
 
-  /// Links this local account to a Firebase account.
-  Future<void> setFirebaseUid(int userId, String uid) async {
+  /// Links this local account to its cloud account (the API user ID).
+  Future<void> setCloudUid(int userId, String uid) async {
     final db = await _database;
-    await db.update('users', {'firebaseUid': uid}, where: 'id = ?', whereArgs: [userId]);
+    await db.update('users', {'cloudUid': uid}, where: 'id = ?', whereArgs: [userId]);
     DataChanges.bump();
   }
 
@@ -177,7 +181,7 @@ class Db {
         'email': '',
         'address': '',
         'dateOfBirth': '',
-        'firebaseUid': '',
+        'cloudUid': '',
         'deleted': 1,
       },
       where: 'id = ?',

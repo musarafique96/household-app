@@ -218,8 +218,8 @@ class _LoginScreenState extends State<LoginScreen> {
     // Also sign in to the cloud, if this account has one. Offline sign-in still works without it.
     try {
       final cloud = await CloudAuth.signIn(username, password);
-      if (c.user.firebaseUid.isEmpty) {
-        await Db.instance.setFirebaseUid(c.user.id, cloud.uid);
+      if (c.user.cloudUid.isEmpty) {
+        await Db.instance.setCloudUid(c.user.id, cloud.uid);
       }
       await CloudFamily.saveProfile(username: username, phone: c.user.phone);
     } catch (_) {}

@@ -211,7 +211,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
       );
 
       if (cloudUid.isNotEmpty) {
-        await Db.instance.setFirebaseUid(saved.id, cloudUid);
+        await Db.instance.setCloudUid(saved.id, cloudUid);
       }
       if (CloudAuth.currentUser != null) {
         try {
@@ -287,7 +287,7 @@ class _AccountFormScreenState extends State<AccountFormScreen> {
         if (!e.message.contains('taken')) rethrow;
         cloud = await CloudAuth.signIn(user.username, pwd);
       }
-      await Db.instance.setFirebaseUid(user.id, cloud.uid);
+      await Db.instance.setCloudUid(user.id, cloud.uid);
       if (mounted) setState(() {});
     } on CloudAuthException catch (e) {
       _showError(e.message);
