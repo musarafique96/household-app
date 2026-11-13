@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_settings.dart';
+import 'budget_sync.dart';
 import 'data/db.dart';
 import 'data/models.dart';
 import 'screens/family_screen.dart';
@@ -16,7 +17,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.load();
   await Db.instance.applyAdminEmail();
-  Session.restore();
+  Session.restore().then((_) => BudgetSync.scheduleSoon());
   runApp(const HouseholdApp());
 }
 

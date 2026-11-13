@@ -26,14 +26,14 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0, cloudUid TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
-            'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL)');
+            'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0)');
         await db.execute(
-            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL, currency TEXT NOT NULL DEFAULT \'\', originalAmount REAL NOT NULL DEFAULT 0)');
+            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL, currency TEXT NOT NULL DEFAULT \'\', originalAmount REAL NOT NULL DEFAULT 0, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0)');
         await db.execute(
             'CREATE TABLE shared (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, amount REAL NOT NULL, paidBy INTEGER NOT NULL, participants TEXT NOT NULL, date TEXT NOT NULL, groupId INTEGER NOT NULL DEFAULT 0, splitMethod TEXT NOT NULL DEFAULT \'equal\', shares TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
@@ -46,6 +46,13 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // Budget rows get a cloud ID once they are sent to the household on the API. '' means not sent yet.
+        if (oldVersion < 12) {
+          for (final table in ['categories', 'expenses']) {
+            await db.execute("ALTER TABLE $table ADD COLUMN cloudId TEXT NOT NULL DEFAULT ''");
+            await db.execute('ALTER TABLE $table ADD COLUMN cloudVersion INTEGER NOT NULL DEFAULT 0');
+          }
+        }
         // The cloud account ID moved from Firebase to the API, so the column is renamed to match.
         if (oldVersion < 11) {
           await db.execute('ALTER TABLE users RENAME COLUMN firebaseUid TO cloudUid');
@@ -354,6 +361,52 @@ class Db {
       'originalAmount': originalAmount ?? amount,
     });
     DataChanges.bump();
+  }
+
+  // Budget sync (see budget_sync.dart): rows that have not been sent to the household yet.
+  Future<List<Map<String, Object?>>> unsyncedCategories(int limit) async {
+    final db = await _database;
+    return db.query(
+      'categories',
+      where: "cloudId = ''",
+      orderBy: 'id',
+      limit: limit,
+    );
+  }
+
+  /// Expenses not sent yet, with the cloud ID of their category. An expense waits until its category is in the cloud.
+  Future<List<Map<String, Object?>>> unsyncedExpenses(int limit) async {
+    final db = await _database;
+    return db.rawQuery(
+      '''
+      SELECT e.id, e.amount, e.date, e.note, c.cloudId AS categoryCloudId
+      FROM expenses e JOIN categories c ON c.id = e.categoryId
+      WHERE e.cloudId = '' AND c.cloudId != ''
+      ORDER BY e.id
+      LIMIT ?
+      ''',
+      [limit],
+    );
+  }
+
+  Future<void> markCategorySynced(int id, String cloudId, int version) async {
+    final db = await _database;
+    await db.update(
+      'categories',
+      {'cloudId': cloudId, 'cloudVersion': version},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> markExpenseSynced(int id, String cloudId, int version) async {
+    final db = await _database;
+    await db.update(
+      'expenses',
+      {'cloudId': cloudId, 'cloudVersion': version},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // Exchange rates: how much one unit of a currency is worth in the account currency.

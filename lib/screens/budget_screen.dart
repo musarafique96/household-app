@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/data_refresh.dart';
 import '../budget_math.dart';
+import '../budget_sync.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -118,6 +119,7 @@ class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<Budge
     final limit = double.tryParse(limitCtrl.text.trim());
     if (saved == true && name.isNotEmpty && limit != null && limit > 0) {
       await Db.instance.addCategory(user.id, name, limit);
+      BudgetSync.scheduleSoon();
       _refresh();
     }
   }

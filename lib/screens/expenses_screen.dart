@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/data_refresh.dart';
 import '../currencies.dart';
+import '../budget_sync.dart';
 import '../data/db.dart';
 import '../data/models.dart';
 import '../session.dart';
@@ -192,6 +193,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> with DataRefreshState<E
       currency: stored,
       originalAmount: amount,
     );
+    BudgetSync.scheduleSoon();
     _refresh();
   }
 

@@ -1,4 +1,10 @@
+import 'package:google_sign_in/google_sign_in.dart';
+
 import 'api_client.dart';
+
+/// The Web client ID from the Google Cloud project. The API checks Google's token against it. It is public, not a secret.
+const String _googleWebClientId =
+    '360184901967-lr5k1vrvvjk7s5ikj3qia8i4f5225iko.apps.googleusercontent.com';
 
 /// A message to show the person when sign-in or account changes fail.
 class CloudAuthException implements Exception {
@@ -117,12 +123,40 @@ class CloudAuth {
   }
 
   // ---- Paused until the API supports them ----
-  // These keep the existing screens compiling. Gmail, phone, and Google sign-in come back in later phases.
+  // These keep the existing screens compiling. Linking an existing account to Gmail and phone sign-in come later.
 
   static const String _later = 'This comes later, when the API supports it.';
 
-  /// The Gmail address linked to the account. Always null until Gmail sign-in is on the API.
-  static String? linkedGmail() => null;
+  /// Signs in with a Google account. The API checks Google's token and finds or creates the account by its verified email.
+  /// Returns null if the person closes the Google picker.
+  static Future<CloudUser?> signInWithGoogle() async {
+    final google = GoogleSignIn(scopes: ['email'], serverClientId: _googleWebClientId);
+    GoogleSignInAccount? account;
+    try {
+      account = await google.signIn();
+    } catch (e) {
+      throw CloudAuthException('Google sign-in did not work. $e');
+    }
+    if (account == null) return null;
+
+    final idToken = (await account.authentication).idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw CloudAuthException('Google did not give a sign-in token. Please try again.');
+    }
+    try {
+      final data = await ApiClient.post('/auth/google', {'idToken': idToken}) as Map<String, dynamic>;
+      await ApiClient.saveTokens(data['accessToken'] as String, data['refreshToken'] as String);
+      return _loadMe();
+    } on ApiException catch (e) {
+      throw CloudAuthException(e.message);
+    }
+  }
+
+  /// The Gmail address linked to the account. A Google sign-in account has its verified Gmail as its email.
+  static String? linkedGmail() {
+    final email = _current?.email ?? '';
+    return email.isEmpty ? null : email;
+  }
 
   /// Usernames are checked by the server when the account is created, so there is no separate check.
   static Future<bool> usernameTakenByOther(String username) async => false;
@@ -134,5 +168,4 @@ class CloudAuth {
 
   static Future<void> addUsername(String username, String password) async =>
       throw CloudAuthException(_later);
-
 }
