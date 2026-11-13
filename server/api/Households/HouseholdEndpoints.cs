@@ -157,10 +157,12 @@ public static class HouseholdEndpoints
         if (me is null) return Results.Unauthorized();
 
         await using var cmd = db.CreateCommand(
-            @"select i.id, h.name, i.target_type, i.target_value, i.created_at
+            @"select i.id, h.name, i.target_type, i.target_value, i.created_at, i.household_id,
+                     coalesce(p.display_name, '')
               from invites i
               join households h on h.id = i.household_id
               join users u on u.id = $1
+              left join user_profiles p on p.user_id = i.invited_by
               where i.status = 'pending'
                 and ((i.target_type = 'username' and u.username = i.target_value)
                   or (i.target_type = 'gmail' and lower(u.email) = i.target_value))
@@ -178,6 +180,8 @@ public static class HouseholdEndpoints
                 targetType = reader.GetString(2),
                 targetValue = reader.GetString(3),
                 createdAt = reader.GetDateTime(4),
+                householdId = reader.GetGuid(5),
+                invitedByName = reader.GetString(6),
             });
         }
         return Results.Ok(list);
