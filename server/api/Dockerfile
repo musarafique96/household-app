@@ -10,4 +10,6 @@ WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
+# Run as the image's non-root user (app, uid 1654), not root.
+USER app
 ENTRYPOINT ["dotnet", "Gharbaar.Api.dll"]
