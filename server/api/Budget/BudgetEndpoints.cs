@@ -429,15 +429,17 @@ public static class BudgetEndpoints
                 if (op == "create")
                 {
                     await Sql.Exec(conn, tx,
-                        "insert into expenses (id, household_id, category_id, amount, expense_date, note, created_by) values ($1,$2,$3,$4,$5,$6,$7)",
-                        id, householdId, categoryId, amount, date, note, actor);
+                        "insert into expenses (id, household_id, category_id, amount, expense_date, note, created_by, original_amount, original_currency) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                        id, householdId, categoryId, amount, date, note, actor, Dec(data, "originalAmount"), Clean(Str(data, "originalCurrency")));
                     version = 1;
                 }
                 else
                 {
                     version = Convert.ToInt32(await Sql.Scalar(conn, tx,
-                        @"update expenses set category_id = $1, amount = $2, expense_date = $3, note = $4, version = version + 1, updated_at = now()
-                          where id = $5 and household_id = $6 returning version", categoryId, amount, date, note, id, householdId));
+                        @"update expenses set category_id = $1, amount = $2, expense_date = $3, note = $4, version = version + 1, updated_at = now(),
+                          original_amount = coalesce($7::numeric, original_amount), original_currency = coalesce($8::text, original_currency)
+                          where id = $5 and household_id = $6 returning version",
+                        categoryId, amount, date, note, id, householdId, Dec(data, "originalAmount"), Clean(Str(data, "originalCurrency"))));
                 }
                 payload = ExpensePayload(id, version, categoryId, amount, date, note);
             }
@@ -559,8 +561,10 @@ public static class BudgetEndpoints
 
             var version = await Sql.Scalar(conn, tx,
                 @"update expenses set category_id = $1, amount = $2, expense_date = $3, note = $4, deleted_at = null,
-                  version = version + 1, updated_at = now()
-                  where id = $5 and household_id = $6 returning version", categoryId, amount, date, note, id, householdId);
+                  version = version + 1, updated_at = now(),
+                  original_amount = coalesce($7::numeric, original_amount), original_currency = coalesce($8::text, original_currency)
+                  where id = $5 and household_id = $6 returning version",
+                categoryId, amount, date, note, id, householdId, Dec(data, "originalAmount"), Clean(Str(data, "originalCurrency")));
             if (version is null)
                 return false;
 

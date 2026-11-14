@@ -5,7 +5,8 @@ using Npgsql;
 
 namespace Gharbaar.Api.Households;
 
-public sealed record CreateHouseholdRequest(string? Name);
+public sealed record CreateHouseholdRequest(string? Name, string? Currency);
+public sealed record CurrencyRequest(string? Currency, decimal? Rate);
 public sealed record InviteRequest(string? TargetType, string? TargetValue);
 public sealed record GrantRequest(bool? CanView, bool? CanEdit);
 public sealed record RenameRequest(string? Name);
@@ -23,6 +24,7 @@ public static class HouseholdEndpoints
         households.MapPost("/{householdId:guid}/invites", Invite);
         households.MapPut("/{householdId:guid}/members/{userId:guid}/permissions/{module}", GrantPermission);
         households.MapPut("/{householdId:guid}", RenameHousehold);
+        households.MapPut("/{householdId:guid}/currency", ChangeCurrency);
         households.MapGet("/{householdId:guid}/invites", SentInvites);
         households.MapDelete("/{householdId:guid}/members/{userId:guid}", RemoveMember);
 
@@ -45,14 +47,18 @@ public static class HouseholdEndpoints
         if (name.Length is 0 or > 80)
             return Results.BadRequest(new { error = "Household name must be 1-80 characters." });
 
+        var currency = (req.Currency ?? "PKR").Trim().ToUpperInvariant();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(currency, "^[A-Z]{3}$"))
+            return Results.BadRequest(new { error = "Currency must be a 3-letter code, such as PKR." });
+
         var id = Guid.NewGuid();
         await using var conn = await db.OpenConnectionAsync();
         await using var tx = await conn.BeginTransactionAsync();
-        await Sql.Exec(conn, tx, "insert into households (id, name, created_by) values ($1,$2,$3)", id, name, me.Value);
+        await Sql.Exec(conn, tx, "insert into households (id, name, created_by, currency) values ($1,$2,$3,$4)", id, name, me.Value, currency);
         await Sql.Exec(conn, tx, "insert into household_members (household_id, user_id, role) values ($1,$2,'head')", id, me.Value);
         await tx.CommitAsync();
 
-        return Results.Json(new { id, name, role = "head" }, statusCode: StatusCodes.Status201Created);
+        return Results.Json(new { id, name, role = "head", currency }, statusCode: StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> ListHouseholds(HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
@@ -61,7 +67,7 @@ public static class HouseholdEndpoints
         if (me is null) return Results.Unauthorized();
 
         await using var cmd = db.CreateCommand(
-            @"select h.id, h.name, m.role
+            @"select h.id, h.name, m.role, h.currency
               from households h
               join household_members m on m.household_id = h.id and m.left_at is null
               where m.user_id = $1 and h.deleted_at is null
@@ -71,7 +77,13 @@ public static class HouseholdEndpoints
         var list = new List<object>();
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            list.Add(new { id = reader.GetGuid(0), name = reader.GetString(1), role = reader.GetString(2) });
+            list.Add(new
+            {
+                id = reader.GetGuid(0),
+                name = reader.GetString(1),
+                role = reader.GetString(2),
+                currency = reader.GetString(3),
+            });
         return Results.Ok(list);
     }
 
@@ -319,6 +331,45 @@ public static class HouseholdEndpoints
             });
         }
         return Results.Ok(list);
+    }
+
+    // Changes the main currency. Every budget amount is multiplied by Rate (new currency per one old currency),
+    // so the budget keeps its value. Only a head can do this. The original amounts of expenses are not changed.
+    private static async Task<IResult> ChangeCurrency(
+        Guid householdId, CurrencyRequest req, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+    {
+        var me = CurrentUser.From(http, jwt);
+        if (me is null) return Results.Unauthorized();
+        if (await Access.RoleAsync(db, householdId, me.Value) != "head")
+            return Forbidden("Only a head can change the household currency.");
+
+        var currency = (req.Currency ?? "").Trim().ToUpperInvariant();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(currency, "^[A-Z]{3}$"))
+            return Results.BadRequest(new { error = "Currency must be a 3-letter code, such as PKR." });
+
+        await using var conn = await db.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        var oldCurrency = await Sql.Scalar(conn, tx,
+            "select currency from households where id = $1 and deleted_at is null", householdId) as string;
+        if (oldCurrency is null)
+            return Results.NotFound();
+        if (oldCurrency == currency)
+            return Results.Ok(new { id = householdId, currency });
+        if (req.Rate is not > 0m)
+            return Results.BadRequest(new { error = "Give the rate: how many new-currency units one old-currency unit is worth." });
+
+        var rate = req.Rate.Value;
+        await Sql.Exec(conn, tx,
+            "update budget_categories set monthly_limit = round(monthly_limit * $1, 2), version = version + 1, updated_at = now() where household_id = $2 and deleted_at is null",
+            rate, householdId);
+        await Sql.Exec(conn, tx,
+            "update expenses set amount = round(amount * $1, 2), version = version + 1, updated_at = now() where household_id = $2 and deleted_at is null",
+            rate, householdId);
+        await Sql.Exec(conn, tx, "update households set currency = $1 where id = $2", currency, householdId);
+        await tx.CommitAsync();
+
+        return Results.Ok(new { id = householdId, currency });
     }
 
     private static async Task<IResult> RenameHousehold(

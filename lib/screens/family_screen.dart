@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../cloud_auth.dart';
 import '../cloud_family.dart';
+import '../currencies.dart';
+import '../data/db.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
@@ -100,12 +102,89 @@ class _FamilyScreenState extends State<FamilyScreen> {
     return ok == true && text.isNotEmpty ? text : null;
   }
 
+  /// Asks for a currency code from the list. Returns null if cancelled.
+  Future<String?> _pickCurrency(String title, {required String initial}) async {
+    var choice = initial;
+    final options = currencyChoices(extra: initial);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => FancyAlert(
+          icon: Icons.payments_rounded,
+          title: Text(title),
+          content: DropdownButtonFormField<String>(
+            value: choice,
+            decoration: const InputDecoration(labelText: 'Currency'),
+            items: [for (final c in options) DropdownMenuItem(value: c, child: Text(c))],
+            onChanged: (v) {
+              if (v != null) setDialog(() => choice = v);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Next')),
+          ],
+        ),
+      ),
+    );
+    return ok == true ? choice : null;
+  }
+
   Future<void> _createGroup() async {
     final name = await _askText('Name your group', 'Group name');
     if (name == null) return;
+    final currency = await _pickCurrency(
+      'Main currency of the group',
+      initial: Session.current.value?.currency ?? 'PKR',
+    );
+    if (currency == null) return;
     await _run(() async {
-      await CloudFamily.createFamily(name, _myName);
+      await CloudFamily.createFamily(name, _myName, currency: currency);
     }, 'Group created.');
+  }
+
+  /// Changes the group's main currency. Every amount in the group is converted with the admin's own rates.
+  Future<void> _changeCurrency(FamilyInfo g) async {
+    final me = Session.current.value;
+    final rates = me == null ? <String, double>{} : await Db.instance.exchangeRates(me.id);
+    final accountCurrency = me?.currency ?? '';
+    // How many account-currency units one unit of [code] is worth. The account currency is 1.
+    double? unitsOf(String code) => code == accountCurrency ? 1 : rates[code];
+
+    final picked = await _pickCurrency('Change main currency', initial: g.currency);
+    if (picked == null || picked == g.currency) return;
+
+    final oldUnits = unitsOf(g.currency);
+    final newUnits = unitsOf(picked);
+    if (oldUnits == null || newUnits == null) {
+      final missing = oldUnits == null ? g.currency : picked;
+      _snack('Add the rate for $missing in More > Currency first, so the amounts can be converted.');
+      return;
+    }
+    // New-currency units per one old-currency unit.
+    final rate = oldUnits / newUnits;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        icon: Icons.currency_exchange_rounded,
+        title: const Text('Change the main currency?'),
+        content: Text(
+          'Every budget and expense in ${g.name} is converted from ${g.currency} to $picked. '
+          '1 ${g.currency} = ${rate.toStringAsFixed(4)} $picked. The original amounts of expenses are kept.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Change')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await _run(
+      () => CloudFamily.changeCurrency(g.id, currency: picked, rate: rate),
+      'Main currency changed to $picked.',
+    );
   }
 
   Future<void> _rename(FamilyInfo g) async {
@@ -332,6 +411,11 @@ class _FamilyScreenState extends State<FamilyScreen> {
                   tooltip: 'Change name', onTap: _busy ? null : () => _rename(g)),
             ],
           ),
+          if (g.currency.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Main currency: ${g.currency}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+          ],
           const SizedBox(height: 16),
           for (final m in members) ...[
             Row(
@@ -382,6 +466,12 @@ class _FamilyScreenState extends State<FamilyScreen> {
             const SizedBox(height: 14),
           ],
           if (g.isAdmin) ...[
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _changeCurrency(g),
+              icon: const Icon(Icons.currency_exchange_rounded),
+              label: const Text('Change main currency'),
+            ),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _showConflicts(g),
               icon: const Icon(Icons.sync_problem_rounded),

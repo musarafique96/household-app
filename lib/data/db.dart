@@ -390,7 +390,7 @@ class Db {
     final db = await _database;
     return db.rawQuery(
       '''
-      SELECT e.id, e.amount, e.date, e.note, c.cloudId AS categoryCloudId
+      SELECT e.id, e.userId, e.amount, e.date, e.note, e.currency, e.originalAmount, c.cloudId AS categoryCloudId
       FROM expenses e JOIN categories c ON c.id = e.categoryId
       WHERE e.cloudId = '' AND c.cloudId != ''
       ORDER BY e.id
@@ -426,7 +426,7 @@ class Db {
     final db = await _database;
     return db.query(
       'categories',
-      columns: ['id', 'cloudId', 'cloudVersion', 'name', 'monthlyLimit'],
+      columns: ['id', 'userId', 'cloudId', 'cloudVersion', 'name', 'monthlyLimit'],
       where: "cloudId != '' AND dirty = 1",
       orderBy: 'id',
       limit: limit,
@@ -438,7 +438,7 @@ class Db {
     final db = await _database;
     return db.rawQuery(
       '''
-      SELECT e.id, e.cloudId, e.cloudVersion, e.amount, e.date, e.note, c.cloudId AS categoryCloudId
+      SELECT e.id, e.userId, e.cloudId, e.cloudVersion, e.amount, e.date, e.note, e.currency, e.originalAmount, c.cloudId AS categoryCloudId
       FROM expenses e JOIN categories c ON c.id = e.categoryId
       WHERE e.cloudId != '' AND e.dirty = 1 AND c.cloudId != ''
       ORDER BY e.id
@@ -530,6 +530,13 @@ class Db {
       }
     }
     await txn.delete(table, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// The account currency of a local user. Empty if the user is not found.
+  Future<String> accountCurrency(int userId) async {
+    final db = await _database;
+    final rows = await db.query('users', columns: ['currency'], where: 'id = ?', whereArgs: [userId]);
+    return rows.isEmpty ? '' : rows.first['currency'] as String;
   }
 
   // Exchange rates: how much one unit of a currency is worth in the account currency.

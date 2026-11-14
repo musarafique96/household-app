@@ -31,11 +31,13 @@ class SyncConflict {
       );
 }
 
+/// A group the signed-in person belongs to. [currency] is the group's main currency (every amount on the cloud is in it).
 class FamilyInfo {
   final String id;
   final String name;
   final bool isAdmin;
-  FamilyInfo(this.id, this.name, this.isAdmin);
+  final String currency;
+  FamilyInfo(this.id, this.name, this.isAdmin, {this.currency = ''});
 }
 
 /// A person in a group.
@@ -98,15 +100,28 @@ class CloudFamily {
     final list = await _call(() => ApiClient.get('/households')) as List<dynamic>;
     return list.map((raw) {
       final h = raw as Map<String, dynamic>;
-      return FamilyInfo(h['id'] as String, (h['name'] as String?) ?? 'Group', h['role'] == 'head');
+      return FamilyInfo(
+        h['id'] as String,
+        (h['name'] as String?) ?? 'Group',
+        h['role'] == 'head',
+        currency: (h['currency'] as String?) ?? '',
+      );
     }).toList();
   }
 
   /// Creates a group, and makes the signed-in person its admin. Returns the new group's id.
-  static Future<String> createFamily(String name, String myName) async {
+  /// [currency] is the group's main currency, for example 'PKR'.
+  static Future<String> createFamily(String name, String myName, {required String currency}) async {
     if (_me == null) throw CloudAuthException('Sign in first.');
-    final data = await _call(() => ApiClient.post('/households', {'name': name})) as Map<String, dynamic>;
+    final data = await _call(() => ApiClient.post('/households', {'name': name, 'currency': currency}))
+        as Map<String, dynamic>;
     return data['id'] as String;
+  }
+
+  /// Changes the group's main currency. Every budget amount on the cloud is multiplied by [rate],
+  /// which is how many new-currency units one old-currency unit is worth. Only an admin can do this.
+  static Future<void> changeCurrency(String familyId, {required String currency, required double rate}) async {
+    await _call(() => ApiClient.put('/households/$familyId/currency', {'currency': currency, 'rate': rate}));
   }
 
   static Future<void> renameFamily(String familyId, String name) async {
