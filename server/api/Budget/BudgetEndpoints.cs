@@ -156,7 +156,7 @@ public static class BudgetEndpoints
         var toDate = ParseDate(to) ?? DateOnly.MaxValue;
 
         await using var cmd = db.CreateCommand(
-            @"select id, category_id, amount, expense_date, note, version
+            @"select id, category_id, amount, expense_date, note, version, original_amount, original_currency
               from expenses
               where household_id = $1 and deleted_at is null
                 and expense_date between $2 and $3
@@ -178,6 +178,9 @@ public static class BudgetEndpoints
                 expenseDate = reader.GetFieldValue<DateOnly>(3).ToString("yyyy-MM-dd"),
                 note = reader.IsDBNull(4) ? null : reader.GetString(4),
                 version = reader.GetInt32(5),
+                // The amount and currency the expense was entered in. Null for expenses entered before this was kept.
+                originalAmount = reader.IsDBNull(6) ? (decimal?)null : reader.GetDecimal(6),
+                originalCurrency = reader.IsDBNull(7) ? null : reader.GetString(7),
             });
         }
         return Results.Ok(list);

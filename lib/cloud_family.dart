@@ -37,7 +37,37 @@ class FamilyInfo {
   final String name;
   final bool isAdmin;
   final String currency;
-  FamilyInfo(this.id, this.name, this.isAdmin, {this.currency = ''});
+  /// How this member sees group amounts: 'group' (the group currency) or 'own' (the member's account currency).
+  final String viewCurrency;
+  FamilyInfo(this.id, this.name, this.isAdmin, {this.currency = '', this.viewCurrency = 'group'});
+}
+
+/// A group budget category, in the group currency.
+class GroupCategory {
+  final String id;
+  final String name;
+  final double monthlyLimit;
+  GroupCategory(this.id, this.name, this.monthlyLimit);
+}
+
+/// A group expense, in the group currency. [originalAmount] and [originalCurrency] are what it was entered as.
+class GroupExpense {
+  final String id;
+  final String? categoryId;
+  final double amount;
+  final String date;
+  final String note;
+  final double? originalAmount;
+  final String? originalCurrency;
+  GroupExpense({
+    required this.id,
+    required this.categoryId,
+    required this.amount,
+    required this.date,
+    required this.note,
+    required this.originalAmount,
+    required this.originalCurrency,
+  });
 }
 
 /// A person in a group.
@@ -105,6 +135,7 @@ class CloudFamily {
         (h['name'] as String?) ?? 'Group',
         h['role'] == 'head',
         currency: (h['currency'] as String?) ?? '',
+        viewCurrency: (h['viewCurrency'] as String?) ?? 'group',
       );
     }).toList();
   }
@@ -116,6 +147,42 @@ class CloudFamily {
     final data = await _call(() => ApiClient.post('/households', {'name': name, 'currency': currency}))
         as Map<String, dynamic>;
     return data['id'] as String;
+  }
+
+  /// Saves how this member sees group amounts ('group' or 'own'). It is kept on the account.
+  static Future<void> setViewCurrency(String familyId, String view) async {
+    await _call(() => ApiClient.put('/households/$familyId/view', {'view': view}));
+  }
+
+  /// The group's budget categories, in the group currency.
+  static Future<List<GroupCategory>> groupCategories(String familyId) async {
+    final list = await _call(() => ApiClient.get('/households/$familyId/categories')) as List<dynamic>;
+    return list.map((raw) {
+      final c = raw as Map<String, dynamic>;
+      return GroupCategory(
+        c['id'] as String,
+        (c['name'] as String?) ?? 'Category',
+        (c['monthlyLimit'] as num).toDouble(),
+      );
+    }).toList();
+  }
+
+  /// The group's expenses between [from] and [to] (yyyy-MM-dd), in the group currency.
+  static Future<List<GroupExpense>> groupExpenses(String familyId, {required String from, required String to}) async {
+    final list = await _call(() => ApiClient.get('/households/$familyId/expenses?from=$from&to=$to')) as List<dynamic>;
+    return list.map((raw) {
+      final e = raw as Map<String, dynamic>;
+      final originalAmount = e['originalAmount'] as num?;
+      return GroupExpense(
+        id: e['id'] as String,
+        categoryId: e['categoryId'] as String?,
+        amount: (e['amount'] as num).toDouble(),
+        date: e['expenseDate'] as String,
+        note: (e['note'] as String?) ?? '',
+        originalAmount: originalAmount?.toDouble(),
+        originalCurrency: e['originalCurrency'] as String?,
+      );
+    }).toList();
   }
 
   /// Changes the group's main currency. Every budget amount on the cloud is multiplied by [rate],

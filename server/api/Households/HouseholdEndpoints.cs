@@ -7,6 +7,7 @@ namespace Gharbaar.Api.Households;
 
 public sealed record CreateHouseholdRequest(string? Name, string? Currency);
 public sealed record CurrencyRequest(string? Currency, decimal? Rate);
+public sealed record ViewRequest(string? View);
 public sealed record InviteRequest(string? TargetType, string? TargetValue);
 public sealed record GrantRequest(bool? CanView, bool? CanEdit);
 public sealed record RenameRequest(string? Name);
@@ -25,6 +26,7 @@ public static class HouseholdEndpoints
         households.MapPut("/{householdId:guid}/members/{userId:guid}/permissions/{module}", GrantPermission);
         households.MapPut("/{householdId:guid}", RenameHousehold);
         households.MapPut("/{householdId:guid}/currency", ChangeCurrency);
+        households.MapPut("/{householdId:guid}/view", ChangeView);
         households.MapGet("/{householdId:guid}/invites", SentInvites);
         households.MapDelete("/{householdId:guid}/members/{userId:guid}", RemoveMember);
 
@@ -67,7 +69,7 @@ public static class HouseholdEndpoints
         if (me is null) return Results.Unauthorized();
 
         await using var cmd = db.CreateCommand(
-            @"select h.id, h.name, m.role, h.currency
+            @"select h.id, h.name, m.role, h.currency, m.show_currency
               from households h
               join household_members m on m.household_id = h.id and m.left_at is null
               where m.user_id = $1 and h.deleted_at is null
@@ -83,6 +85,7 @@ public static class HouseholdEndpoints
                 name = reader.GetString(1),
                 role = reader.GetString(2),
                 currency = reader.GetString(3),
+                viewCurrency = reader.GetString(4),
             });
         return Results.Ok(list);
     }
@@ -331,6 +334,29 @@ public static class HouseholdEndpoints
             });
         }
         return Results.Ok(list);
+    }
+
+    // Each member chooses how to see group amounts: 'group' (the main currency) or 'own' (their account currency).
+    // It is saved on the account, so it follows the member to other phones. Any member may change their own setting.
+    private static async Task<IResult> ChangeView(
+        Guid householdId, ViewRequest req, HttpContext http, JwtOptions jwt, NpgsqlDataSource db)
+    {
+        var me = CurrentUser.From(http, jwt);
+        if (me is null) return Results.Unauthorized();
+
+        var view = (req.View ?? "").Trim().ToLowerInvariant();
+        if (view is not ("group" or "own"))
+            return Results.BadRequest(new { error = "View must be 'group' or 'own'." });
+
+        await using var cmd = db.CreateCommand(
+            "update household_members set show_currency = $1 where household_id = $2 and user_id = $3 and left_at is null");
+        cmd.Parameters.AddWithValue(view);
+        cmd.Parameters.AddWithValue(householdId);
+        cmd.Parameters.AddWithValue(me.Value);
+        if (await cmd.ExecuteNonQueryAsync() == 0)
+            return Results.NotFound();
+
+        return Results.Ok(new { id = householdId, view });
     }
 
     // Changes the main currency. Every budget amount is multiplied by Rate (new currency per one old currency),

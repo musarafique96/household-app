@@ -8,6 +8,7 @@ import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
+import 'group_budget_screen.dart';
 import 'sync_conflicts_sheet.dart';
 
 class _GroupsData {
@@ -191,6 +192,32 @@ class _FamilyScreenState extends State<FamilyScreen> {
     final name = await _askText('Change group name', 'Group name', initial: g.name);
     if (name == null) return;
     await _run(() => CloudFamily.renameFamily(g.id, name), 'Name changed.');
+  }
+
+  /// Lets this member choose how group amounts are shown to them. Saved on the account.
+  Widget _viewChooser(FamilyInfo g) {
+    final own = Session.current.value?.currency ?? '';
+    if (own.isEmpty || own == g.currency) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Show group amounts in', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          const SizedBox(height: 6),
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment(value: 'group', label: Text(g.currency)),
+              ButtonSegment(value: 'own', label: Text(own)),
+            ],
+            selected: {g.viewCurrency},
+            onSelectionChanged: _busy
+                ? null
+                : (s) => _run(() => CloudFamily.setViewCurrency(g.id, s.first), 'Saved.'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Opens the list of budget changes that the cloud kept back for this group.
@@ -465,6 +492,18 @@ class _FamilyScreenState extends State<FamilyScreen> {
             ),
             const SizedBox(height: 14),
           ],
+          _viewChooser(g),
+          OutlinedButton.icon(
+            onPressed: _busy
+                ? null
+                : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => GroupBudgetScreen(group: g)),
+                    ),
+            icon: const Icon(Icons.account_balance_wallet_rounded),
+            label: const Text('Group budget'),
+          ),
+          const SizedBox(height: 12),
           if (g.isAdmin) ...[
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _changeCurrency(g),
