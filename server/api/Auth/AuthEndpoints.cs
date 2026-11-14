@@ -198,7 +198,7 @@ public static partial class AuthEndpoints
     }
 
     // Gmail sign-in: the phone sends a Google ID token. We check it was issued by Google for this app,
-    // then find the user by that verified email, or create the user the first time.
+    // then find the user by its Google ID. The first time, link the account with that verified email, or create it.
     private static async Task<IResult> GoogleSignIn(
         GoogleSignInRequest req, NpgsqlDataSource db, TokenService tokens, GoogleOptions google)
     {
@@ -224,18 +224,31 @@ public static partial class AuthEndpoints
         if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
             return invalid;
 
+        var subject = payload.Subject;
         var email = payload.Email.Trim().ToLowerInvariant();
-        var userId = await FindUserIdByEmail(db, email);
+
+        // A linked account is matched by its Google ID, which never changes.
+        var userId = await FindUserIdByGoogleSubject(db, subject);
         if (userId is null)
         {
-            try
+            var byEmail = await FindUserByEmail(db, email);
+            if (byEmail is { } existing)
             {
-                userId = await CreateGoogleUser(db, email, payload.Name);
+                // An account linked to a different Google login is refused. Otherwise link it now.
+                if (existing.GoogleSubject is null)
+                    userId = await LinkGoogleSubject(db, existing.Id, subject) ? existing.Id : null;
             }
-            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+            else
             {
-                // The same person signed in twice at the same moment. Use the account that now exists.
-                userId = await FindUserIdByEmail(db, email);
+                try
+                {
+                    userId = await CreateGoogleUser(db, email, subject, payload.Name);
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    // The same person signed in twice at the same moment. Use the account that now exists.
+                    userId = await FindUserIdByGoogleSubject(db, subject);
+                }
             }
         }
 
@@ -247,15 +260,36 @@ public static partial class AuthEndpoints
         return TokenResponse(tokens, userId.Value, refreshToken);
     }
 
-    private static async Task<Guid?> FindUserIdByEmail(NpgsqlDataSource db, string email)
+    private static async Task<Guid?> FindUserIdByGoogleSubject(NpgsqlDataSource db, string subject)
     {
-        await using var cmd = db.CreateCommand("select id from users where lower(email) = $1");
-        cmd.Parameters.AddWithValue(email);
+        await using var cmd = db.CreateCommand("select id from users where google_subject = $1");
+        cmd.Parameters.AddWithValue(subject);
         var result = await cmd.ExecuteScalarAsync();
         return result is Guid id ? id : null;
     }
 
-    private static async Task<Guid> CreateGoogleUser(NpgsqlDataSource db, string email, string? name)
+    private static async Task<(Guid Id, string? GoogleSubject)?> FindUserByEmail(NpgsqlDataSource db, string email)
+    {
+        await using var cmd = db.CreateCommand("select id, google_subject from users where lower(email) = $1");
+        cmd.Parameters.AddWithValue(email);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            return null;
+
+        return (reader.GetGuid(0), reader.IsDBNull(1) ? null : reader.GetString(1));
+    }
+
+    // Links only an account that has no Google ID yet, so a link can't be replaced by another login.
+    private static async Task<bool> LinkGoogleSubject(NpgsqlDataSource db, Guid userId, string subject)
+    {
+        await using var cmd = db.CreateCommand(
+            "update users set google_subject = $1 where id = $2 and google_subject is null");
+        cmd.Parameters.AddWithValue(subject);
+        cmd.Parameters.AddWithValue(userId);
+        return await cmd.ExecuteNonQueryAsync() == 1;
+    }
+
+    private static async Task<Guid> CreateGoogleUser(NpgsqlDataSource db, string email, string subject, string? name)
     {
         var userId = Guid.NewGuid();
         var displayName = string.IsNullOrWhiteSpace(name) ? email.Split('@')[0] : name.Trim();
@@ -264,10 +298,11 @@ public static partial class AuthEndpoints
         await using var tx = await conn.BeginTransactionAsync();
 
         await using (var insertUser = new NpgsqlCommand(
-            "insert into users (id, email) values ($1, $2)", conn, tx))
+            "insert into users (id, email, google_subject) values ($1, $2, $3)", conn, tx))
         {
             insertUser.Parameters.AddWithValue(userId);
             insertUser.Parameters.AddWithValue(email);
+            insertUser.Parameters.AddWithValue(subject);
             await insertUser.ExecuteNonQueryAsync();
         }
 
