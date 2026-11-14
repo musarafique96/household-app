@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/data_refresh.dart';
 import '../currencies.dart';
+import '../widgets/fancy.dart';
 import '../budget_sync.dart';
 import '../data/db.dart';
 import '../data/models.dart';
@@ -249,7 +250,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> with DataRefreshState<E
                       child: Column(
                         children: [
                           for (final e in exps)
-                            Padding(
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _expenseActions(user, e, data!.categories),
+                              child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               child: Row(
                                 children: [
@@ -279,6 +283,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> with DataRefreshState<E
                                 ],
                               ),
                             ),
+                            ),
                         ],
                       ),
                     ),
@@ -289,6 +294,129 @@ class _ExpensesScreenState extends State<ExpensesScreen> with DataRefreshState<E
         );
       },
     );
+  }
+
+  /// Opens a short menu for an expense: edit or delete.
+  Future<void> _expenseActions(AppUser user, Expense e, List<Category> categories) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Edit'),
+              onTap: () => Navigator.pop(ctx, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded, color: AppColors.red),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'edit') await _editExpense(user, e, categories);
+    if (choice == 'delete') await _deleteExpense(e);
+  }
+
+  /// Edits the amount (in the account currency), category and note. The date stays the same.
+  Future<void> _editExpense(AppUser user, Expense e, List<Category> categories) async {
+    if (categories.isEmpty) return;
+    final amountCtrl = TextEditingController(text: e.amount.toStringAsFixed(2));
+    final noteCtrl = TextEditingController(text: e.note);
+    var selectedId = categories.any((c) => c.id == e.categoryId) ? e.categoryId : categories.first.id;
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Edit expense',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: 'Amount', suffixText: user.currency),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: selectedId,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: [
+                  for (final c in categories) DropdownMenuItem(value: c.id, child: Text(c.name)),
+                ],
+                onChanged: (v) {
+                  if (v != null) setSheet(() => selectedId = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: 'What was it for? (optional)'),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save changes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (saved != true || !mounted) return;
+    final amount = double.tryParse(amountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      _snack('Enter an amount above zero.');
+      return;
+    }
+    await Db.instance.updateExpense(
+      e.id,
+      categoryId: selectedId,
+      amount: amount,
+      note: noteCtrl.text.trim(),
+      date: e.date,
+    );
+    BudgetSync.scheduleSoon();
+    _refresh();
+  }
+
+  Future<void> _deleteExpense(Expense e) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        title: const Text('Delete this expense?'),
+        content: const Text('It is removed from the budget. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await Db.instance.deleteExpense(e.id);
+    BudgetSync.scheduleSoon();
+    _refresh();
   }
 
   /// Category and date, plus the original amount if it was entered in another currency.

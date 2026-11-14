@@ -124,6 +124,101 @@ class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<Budge
     }
   }
 
+  /// Opens a short menu for a category: edit or delete.
+  Future<void> _categoryActions(Category c) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Edit'),
+              onTap: () => Navigator.pop(ctx, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded, color: AppColors.red),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == 'edit') await _editCategory(c);
+    if (choice == 'delete') await _deleteCategory(c);
+  }
+
+  Future<void> _editCategory(Category c) async {
+    final user = Session.current.value;
+    if (user == null) return;
+
+    final nameCtrl = TextEditingController(text: c.name);
+    final limitCtrl = TextEditingController(
+      text: c.monthlyLimit % 1 == 0
+          ? c.monthlyLimit.toStringAsFixed(0)
+          : c.monthlyLimit.toString(),
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        title: const Text('Edit budget category'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: limitCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: 'Monthly limit (${user.currency})'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    final name = nameCtrl.text.trim();
+    final limit = double.tryParse(limitCtrl.text.trim());
+    if (saved == true && name.isNotEmpty && limit != null && limit > 0) {
+      await Db.instance.updateCategory(c.id, name: name, monthlyLimit: limit);
+      BudgetSync.scheduleSoon();
+      _refresh();
+    }
+  }
+
+  Future<void> _deleteCategory(Category c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => FancyAlert(
+        title: Text('Delete ${c.name}?'),
+        content: const Text(
+            'Its expenses in every month are deleted too. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await Db.instance.deleteCategory(c.id);
+    BudgetSync.scheduleSoon();
+    _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppUser?>(
@@ -251,10 +346,13 @@ class _BudgetScreenState extends State<BudgetScreen> with DataRefreshState<Budge
                       for (var i = 0; i < rows.length; i++)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: _CategoryTile(
-                            row: rows[i],
-                            color: _palette[i % _palette.length],
-                            currency: cur,
+                          child: GestureDetector(
+                            onTap: () => _categoryActions(data!.categories[i]),
+                            child: _CategoryTile(
+                              row: rows[i],
+                              color: _palette[i % _palette.length],
+                              currency: cur,
+                            ),
                           ),
                         ),
                       // Shown only when there are no categories. The + in the header stays.
