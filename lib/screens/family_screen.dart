@@ -6,6 +6,7 @@ import '../session.dart';
 import '../theme.dart';
 import '../widgets/fancy.dart';
 import '../widgets/ui.dart';
+import 'sync_conflicts_sheet.dart';
 
 class _GroupsData {
   final List<FamilyInfo> groups;
@@ -111,6 +112,16 @@ class _FamilyScreenState extends State<FamilyScreen> {
     final name = await _askText('Change group name', 'Group name', initial: g.name);
     if (name == null) return;
     await _run(() => CloudFamily.renameFamily(g.id, name), 'Name changed.');
+  }
+
+  /// Opens the list of budget changes that the cloud kept back for this group.
+  Future<void> _showConflicts(FamilyInfo g) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => SyncConflictsSheet(familyId: g.id),
+    );
   }
 
   Future<void> _addMember(FamilyInfo g) async {
@@ -369,6 +380,14 @@ class _FamilyScreenState extends State<FamilyScreen> {
               ],
             ),
             const SizedBox(height: 14),
+          ],
+          if (g.isAdmin) ...[
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _showConflicts(g),
+              icon: const Icon(Icons.sync_problem_rounded),
+              label: const Text('Sync conflicts'),
+            ),
+            const SizedBox(height: 12),
           ],
           Row(
             children: [

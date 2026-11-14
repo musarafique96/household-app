@@ -2,6 +2,35 @@ import 'api_client.dart';
 import 'cloud_auth.dart';
 
 /// A group the signed-in person belongs to.
+/// A change from this phone that the cloud kept back for someone to decide on.
+/// [entity] is 'budget_category' or 'expense'. [clientData] is what this phone wanted to save (empty for a deletion).
+class SyncConflict {
+  final String id;
+  final String entity;
+  final int clientVersion;
+  final int serverVersion;
+  final Map<String, dynamic> clientData;
+  final DateTime createdAt;
+
+  SyncConflict({
+    required this.id,
+    required this.entity,
+    required this.clientVersion,
+    required this.serverVersion,
+    required this.clientData,
+    required this.createdAt,
+  });
+
+  factory SyncConflict.fromJson(Map<String, dynamic> j) => SyncConflict(
+        id: j['id'] as String,
+        entity: j['entity'] as String,
+        clientVersion: (j['clientVersion'] as num).toInt(),
+        serverVersion: (j['serverVersion'] as num).toInt(),
+        clientData: (j['clientData'] as Map<String, dynamic>?) ?? {},
+        createdAt: DateTime.parse(j['createdAt'] as String),
+      );
+}
+
 class FamilyInfo {
   final String id;
   final String name;
@@ -180,5 +209,19 @@ class CloudFamily {
     final me = _me;
     if (me == null) return;
     await removeMember(familyId, me.uid);
+  }
+
+  /// Changes the budget kept back for review. Only heads and members who can edit the budget see them.
+  static Future<List<SyncConflict>> conflicts(String familyId) async {
+    final list = await _call(() => ApiClient.get('/households/$familyId/conflicts')) as List<dynamic>;
+    return list.map((r) => SyncConflict.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// keepMine: the phone's change is applied again as a new change. Otherwise the cloud's version stays.
+  static Future<void> resolveConflict(String familyId, SyncConflict c, {required bool keepMine}) async {
+    await _call(() => ApiClient.post(
+          '/households/$familyId/conflicts/${c.id}/resolve',
+          {'keep': keepMine ? 'mine' : 'server'},
+        ));
   }
 }
