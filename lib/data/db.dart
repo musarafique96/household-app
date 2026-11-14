@@ -26,14 +26,17 @@ class Db {
     final path = join(await getDatabasesPath(), 'household.db');
     final opened = await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await db.execute(
             'CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, currency TEXT NOT NULL, phone TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL DEFAULT \'\', address TEXT NOT NULL DEFAULT \'\', dateOfBirth TEXT NOT NULL DEFAULT \'\', username TEXT NOT NULL DEFAULT \'\', passwordHash TEXT NOT NULL DEFAULT \'\', salt TEXT NOT NULL DEFAULT \'\', role TEXT NOT NULL DEFAULT \'member\', deleted INTEGER NOT NULL DEFAULT 0, passkeyHash TEXT NOT NULL DEFAULT \'\', passkeySalt TEXT NOT NULL DEFAULT \'\', passkeyEnabled INTEGER NOT NULL DEFAULT 0, cloudUid TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
-            'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0)');
+            'CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, name TEXT NOT NULL, monthlyLimit REAL NOT NULL, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0)');
         await db.execute(
-            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL, currency TEXT NOT NULL DEFAULT \'\', originalAmount REAL NOT NULL DEFAULT 0, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0)');
+            'CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER NOT NULL, categoryId INTEGER NOT NULL, amount REAL NOT NULL, note TEXT, date TEXT NOT NULL, currency TEXT NOT NULL DEFAULT \'\', originalAmount REAL NOT NULL DEFAULT 0, cloudId TEXT NOT NULL DEFAULT \'\', cloudVersion INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0)');
+        // Deleted rows that the cloud still has, waiting to be sent as deletes.
+        await db.execute(
+            'CREATE TABLE sync_deletes (entity TEXT NOT NULL, cloudId TEXT NOT NULL, cloudVersion INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (entity, cloudId))');
         await db.execute(
             'CREATE TABLE shared (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, amount REAL NOT NULL, paidBy INTEGER NOT NULL, participants TEXT NOT NULL, date TEXT NOT NULL, groupId INTEGER NOT NULL DEFAULT 0, splitMethod TEXT NOT NULL DEFAULT \'equal\', shares TEXT NOT NULL DEFAULT \'\')');
         await db.execute(
@@ -46,6 +49,14 @@ class Db {
             'CREATE TABLE exchange_rates (userId INTEGER NOT NULL, currency TEXT NOT NULL, rate REAL NOT NULL, PRIMARY KEY (userId, currency))');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // Edited synced rows are marked dirty, and deletions of synced rows are kept in sync_deletes until sent.
+        if (oldVersion < 13) {
+          for (final table in ['categories', 'expenses']) {
+            await db.execute('ALTER TABLE $table ADD COLUMN dirty INTEGER NOT NULL DEFAULT 0');
+          }
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS sync_deletes (entity TEXT NOT NULL, cloudId TEXT NOT NULL, cloudVersion INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (entity, cloudId))");
+        }
         // Budget rows get a cloud ID once they are sent to the household on the API. '' means not sent yet.
         if (oldVersion < 12) {
           for (final table in ['categories', 'expenses']) {
@@ -389,11 +400,12 @@ class Db {
     );
   }
 
+  /// Records that the cloud accepted a new row. [version] is the cloud's version for it.
   Future<void> markCategorySynced(int id, String cloudId, int version) async {
     final db = await _database;
     await db.update(
       'categories',
-      {'cloudId': cloudId, 'cloudVersion': version},
+      {'cloudId': cloudId, 'cloudVersion': version, 'dirty': 0},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -403,10 +415,121 @@ class Db {
     final db = await _database;
     await db.update(
       'expenses',
-      {'cloudId': cloudId, 'cloudVersion': version},
+      {'cloudId': cloudId, 'cloudVersion': version, 'dirty': 0},
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// Synced categories changed on this phone and not sent yet.
+  Future<List<Map<String, Object?>>> dirtyCategories(int limit) async {
+    final db = await _database;
+    return db.query(
+      'categories',
+      columns: ['id', 'cloudId', 'cloudVersion', 'name', 'monthlyLimit'],
+      where: "cloudId != '' AND dirty = 1",
+      orderBy: 'id',
+      limit: limit,
+    );
+  }
+
+  /// Synced expenses changed on this phone and not sent yet, with their category's cloud ID.
+  Future<List<Map<String, Object?>>> dirtyExpenses(int limit) async {
+    final db = await _database;
+    return db.rawQuery(
+      '''
+      SELECT e.id, e.cloudId, e.cloudVersion, e.amount, e.date, e.note, c.cloudId AS categoryCloudId
+      FROM expenses e JOIN categories c ON c.id = e.categoryId
+      WHERE e.cloudId != '' AND e.dirty = 1 AND c.cloudId != ''
+      ORDER BY e.id
+      LIMIT ?
+      ''',
+      [limit],
+    );
+  }
+
+  /// Rows deleted on this phone that the cloud still has. [entity] is 'budget_category' or 'expense'.
+  Future<List<Map<String, Object?>>> pendingDeletes(String entity, int limit) async {
+    final db = await _database;
+    return db.query(
+      'sync_deletes',
+      columns: ['cloudId', 'cloudVersion'],
+      where: 'entity = ?',
+      whereArgs: [entity],
+      limit: limit,
+    );
+  }
+
+  Future<void> finishDelete(String entity, String cloudId) async {
+    final db = await _database;
+    await db.delete('sync_deletes', where: 'entity = ? AND cloudId = ?', whereArgs: [entity, cloudId]);
+  }
+
+  /// Keeps the cloud's version after the cloud refused a change, so the change is not sent again.
+  Future<void> clearDirty(String table, int id) async {
+    final db = await _database;
+    await db.update(table, {'dirty': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Edits a category. A synced category is marked dirty so the change is sent.
+  Future<void> updateCategory(int id, {required String name, required double monthlyLimit}) async {
+    final db = await _database;
+    await db.rawUpdate(
+      "UPDATE categories SET name = ?, monthlyLimit = ?, dirty = CASE WHEN cloudId != '' THEN 1 ELSE dirty END WHERE id = ?",
+      [name, monthlyLimit, id],
+    );
+    DataChanges.bump();
+  }
+
+  /// Edits an expense. A synced expense is marked dirty so the change is sent.
+  Future<void> updateExpense(
+    int id, {
+    required int categoryId,
+    required double amount,
+    required String note,
+    required DateTime date,
+  }) async {
+    final db = await _database;
+    await db.rawUpdate(
+      "UPDATE expenses SET categoryId = ?, amount = ?, note = ?, date = ?, dirty = CASE WHEN cloudId != '' THEN 1 ELSE dirty END WHERE id = ?",
+      [categoryId, amount, note, ymd(date), id],
+    );
+    DataChanges.bump();
+  }
+
+  /// Deletes an expense. If the cloud has it, a deletion is kept to send.
+  Future<void> deleteExpense(int id) async {
+    final db = await _database;
+    await db.transaction((txn) => _removeRow(txn, 'expenses', 'expense', id));
+    DataChanges.bump();
+  }
+
+  /// Deletes a category and its expenses. Synced rows are kept as deletions to send.
+  Future<void> deleteCategory(int id) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      final expenses = await txn.query('expenses', columns: ['id'], where: 'categoryId = ?', whereArgs: [id]);
+      for (final e in expenses) {
+        await _removeRow(txn, 'expenses', 'expense', e['id'] as int);
+      }
+      await _removeRow(txn, 'categories', 'budget_category', id);
+    });
+    DataChanges.bump();
+  }
+
+  Future<void> _removeRow(Transaction txn, String table, String entity, int id) async {
+    final rows = await txn.query(table, columns: ['cloudId', 'cloudVersion'], where: 'id = ?', whereArgs: [id]);
+    if (rows.isNotEmpty) {
+      final cloudId = rows.first['cloudId'] as String;
+      if (cloudId.isNotEmpty) {
+        await txn.insert(
+          'sync_deletes',
+          {'entity': entity, 'cloudId': cloudId, 'cloudVersion': rows.first['cloudVersion']},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+    await txn.delete(table, where: 'id = ?', whereArgs: [id]);
   }
 
   // Exchange rates: how much one unit of a currency is worth in the account currency.
